@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+surf_bot.db
+*.png
+*.jpeg
+*.jpg
+api權限.txt
