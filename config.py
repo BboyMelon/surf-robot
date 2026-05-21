@@ -11,6 +11,7 @@ SUPABASE_URL            = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY            = os.getenv("SUPABASE_KEY", "")
 
 ADMIN_PASSWORD = "surf123"
+STREAMLIT_URL  = os.getenv("STREAMLIT_URL", "（尚未部署，敬請期待 🚀）")
 
 # ── 浪點設定：地區 / 陸風方向 / 安全提示 ─────────────────────
 SURF_SPOTS_CONFIG = {
