@@ -8,8 +8,9 @@ import hmac
 import base64
 import requests
 from flask import Flask, request, abort
-from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG
+from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, STREAMLIT_URL, get_surf_level
 from db import add_member, add_group, save_profile, get_profile
+from broadcast import fetch_marine_data, swell_energy, is_offshore, SPOT_STATION_MAP, personal_rating
 
 app = Flask(__name__)
 
@@ -24,28 +25,112 @@ def build_spot_menu() -> str:
         lines.append(f"{cat}：{'、'.join(spots)}")
     return "\n".join(lines)
 
+# ── 地區關鍵字 → 浪點對應 ─────────────────────────────────────
+REGION_SPOTS = {
+    "北部": ["金山沙珠灣", "翡翠灣"],
+    "宜蘭": ["宜蘭外澳", "烏石港"],
+    "中部": ["台中松柏港", "外埔"],
+    "東部": ["花蓮北濱公園", "花蓮環保公園", "台東金樽", "台東東河"],
+    "花蓮": ["花蓮北濱公園", "花蓮環保公園"],
+    "台東": ["台東金樽", "台東東河"],
+    "南部": ["台南漁光島", "恆春南灣", "恆春九鵬", "恆春佳樂水"],
+    "恆春": ["恆春南灣", "恆春九鵬", "恆春佳樂水"],
+    "墾丁": ["恆春南灣", "恆春佳樂水"],
+}
+
+def detect_query_spots(text: str) -> list:
+    """從訊息文字偵測要查詢的浪點，回傳浪點名稱清單。"""
+    matched = []
+    # 地區關鍵字
+    for region, spots in REGION_SPOTS.items():
+        if region in text:
+            for s in spots:
+                if s not in matched:
+                    matched.append(s)
+    # 浪點名稱（部分比對）
+    for spot in SPOT_STATION_MAP:
+        if spot in text or any(part in text for part in spot.split("/")):
+            if spot not in matched:
+                matched.append(spot)
+    # 短名稱比對（例：烏石港、外澳、南灣、金山、外埔）
+    SHORT_MAP = {
+        "外澳": "宜蘭外澳", "烏石": "烏石港",
+        "北濱": "花蓮北濱公園", "環保公園": "花蓮環保公園",
+        "金樽": "台東金樽", "東河": "台東東河",
+        "漁光": "台南漁光島", "南灣": "恆春南灣",
+        "九鵬": "恆春九鵬", "佳樂水": "恆春佳樂水",
+        "沙珠灣": "金山沙珠灣", "翡翠灣": "翡翠灣",
+        "松柏港": "台中松柏港",
+    }
+    for short, full in SHORT_MAP.items():
+        if short in text and full not in matched:
+            matched.append(full)
+    return matched
+
+
+def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str:
+    """即時查詢回報：只顯示指定浪點資料。"""
+    from datetime import datetime
+    now = datetime.now().strftime("%m/%d %H:%M")
+    lines = [f"🌊 即時浪況查詢｜{now}\n"]
+
+    for spot_name in spots:
+        cfg        = SURF_SPOTS_CONFIG.get(spot_name, {})
+        station_id = SPOT_STATION_MAP.get(spot_name)
+        data       = marine.get(station_id, {}) if station_id else {}
+
+        wave_h   = data.get("wave_height", 0.0)
+        period   = data.get("wave_period", 0.0)
+        wave_dir = data.get("wave_dir", "—")
+        wind_dir = data.get("wind_dir", "—")
+        wind_spd = data.get("wind_speed", 0.0)
+
+        if wave_h == 0.0 and period == 0.0:
+            lines.append(f"📍 {spot_name}\n⚠️ 目前無觀測資料\n")
+            continue
+
+        offshore     = is_offshore(wind_dir, cfg.get("offshore_wind", []))
+        offshore_tag = "✅ 陸風" if offshore else "❌ 向岸風"
+        level        = get_surf_level(wave_h, period)
+        energy       = swell_energy(wave_h, period)
+        swell_warn   = " ⚠️ 長浪警戒！" if (period > 8 and wave_h > 1.5) else ""
+
+        lines.append(f"📍 {spot_name}")
+        lines.append(f"🌊 浪高 {wave_h:.1f}m{swell_warn}｜週期 {period:.1f}s｜{wave_dir}")
+        lines.append(f"💨 {wind_dir} {wind_spd:.1f}m/s {offshore_tag}")
+        lines.append(f"🏄 GoOcean：{level['label']}")
+        lines.append(f"⚡ 湧浪能量：{energy}")
+
+        if profile:
+            rating = personal_rating(wave_h, period, profile)
+            lines.append(f"👤 {rating}")
+
+        safety = cfg.get("safety_note", "")
+        if safety:
+            lines.append(f"⚠️ {safety}")
+        lines.append("")
+
+    lines.append("📡 資料來源：中央氣象署 O-B0075-001")
+    return "\n".join(lines)
+
 # ── 加好友歡迎訊息 ────────────────────────────────────────────
 def build_welcome(is_group: bool = False) -> str:
-    spot_menu = build_spot_menu()
-    intro = "歡迎加入 🌊 浪況小助手！" if is_group else "嗨！歡迎使用 🌊 浪況小助手！"
-    return f"""{intro}
+    return """🏄‍♂️ 歡迎加入【黃金浪況預報小助手】！
+我們會為您精準守候台灣各大浪點，讓您不再錯過起浪好日子！
 
-我是你的專屬衝浪教練 🏄
-填寫個人資料後，我會根據你的程度提供量身訂製的浪況建議！
+⏰ 【每日定時報浪時間】
+每日 05:00 自動推播最即時、結合 Swell Eye 湧浪能量與 GoOcean 安全評級的精準浪況簡報！
 
-請複製以下格式，填寫後直接回傳給我 👇
+👇 【自助功能選單】
+手機下方已為您準備快捷圖文選單，動動手指即可解鎖更多衝浪黑科技！
 
-━━━━━━━━━━━━
-性別：（男 / 女 / 其他）
-浪齡：（例：3）
-衝浪板型：（長板 / 短板 / 中長板）
-常衝浪點：（填入你常去的浪點）
-━━━━━━━━━━━━
+🔍 即時浪況查詢 — 輸入區域或浪點名稱立即查
+📝 Surfer 檔案建立 — 建立個人資料，解鎖客製化建議
+📚 專業海象觀測網 — 精選三大海象資料來源
+🗺️ Windy 動態地圖 — 一鍵查看台灣浪高粒子圖
 
-{spot_menu}
-
-填完後我立刻幫你建立衝浪檔案 🤙
-每日早上 06:00 推送專屬浪況早報 🌊"""
+💬 有任何建議或想新增的浪點，歡迎隨時留言！
+祝您天天 Shred Hard、安全下海！🌊"""
 
 # ── 解析使用者回傳的 Profile 訊息 ────────────────────────────
 def parse_profile(text: str) -> dict:
@@ -66,7 +151,7 @@ def parse_profile(text: str) -> dict:
 
     gender     = extract(r"性別[：:]\s*(.+)", text)
     years_raw  = extract(r"浪齡[：:]\s*(\d+)", text)
-    board_type = extract(r"衝浪板型[：:]\s*(.+)", text)
+    board_type = extract(r"(?:版型|衝浪板型)[：:]\s*(.+)", text)
     fav_spots  = extract(r"常衝浪點[：:]\s*(.+)", text)
 
     surf_years = int(years_raw) if years_raw.isdigit() else 0
@@ -87,6 +172,114 @@ def skill_label(surf_years: int) -> str:
     else:
         return "🔥 進階衝浪者"
 
+# ── 圖文選單：即時浪況查詢 ───────────────────────────────────
+SPOT_QUERY_HINT = """🔍 即時浪況查詢
+
+請輸入區域關鍵字或浪點名稱，小助手立刻為您抓取最新海象！
+
+📍 區域關鍵字：
+  北部、宜蘭、中部、東部、南部
+
+📍 浪點名稱範例：
+  烏石港、外澳、沙珠灣、翡翠灣
+  金山、外埔、北濱、金樽、南灣
+
+直接回傳關鍵字即可 👇"""
+
+# ── 圖文選單：Surfer 檔案建立 ──────────────────────────────
+PROFILE_FORM = """📝 填寫小資料，解鎖客製化浪況建議！
+
+請複製以下格式，填寫後直接回傳 👇
+
+━━━━━━━━━━━━
+性別：（男 / 女 / 其他）
+浪齡：（例：3）
+版型：（長板 / 短板 / 中長板）
+常衝浪點：（填入你常去的浪點）
+━━━━━━━━━━━━
+
+建立後每日 05:00 推送專屬浪況早報 🌊"""
+
+# ── 圖文選單：專業海象觀測網 Flex Message ─────────────────
+def build_ocean_links_flex() -> dict:
+    return {
+        "type": "flex",
+        "altText": "📚 專業海象觀測網",
+        "contents": {
+            "type": "bubble",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#0D4F8C",
+                "contents": [{
+                    "type": "text",
+                    "text": "🌊 精選海象觀測資源",
+                    "color": "#ffffff",
+                    "weight": "bold",
+                    "size": "lg",
+                }],
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "sm",
+                "contents": [
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#1a5fa8",
+                        "action": {
+                            "type": "uri",
+                            "label": "🌊 中央氣象署 CWA 海象資訊",
+                            "uri": "https://ocean.cwb.gov.tw/",
+                        },
+                    },
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#0A6B5E",
+                        "action": {
+                            "type": "uri",
+                            "label": "🔬 國家海洋研究院 NODASS",
+                            "uri": "https://nodass.namr.gov.tw/",
+                        },
+                    },
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#C45D00",
+                        "action": {
+                            "type": "uri",
+                            "label": "🏄 Swell Eye 衝浪科學",
+                            "uri": "https://www.surf-forecast.com/",
+                        },
+                    },
+                ],
+            },
+        },
+    }
+
+# ── 未建檔提示 ────────────────────────────────────────────────
+def build_no_profile_prompt(name: str = "") -> str:
+    greeting = f"嗨，{name}！" if name else "嗨！"
+    spot_menu = build_spot_menu()
+    return f"""{greeting}
+
+尚未建立衝浪檔案 🏄
+
+建立後每天早上 05:00 會依你的程度與常衝浪點，推送專屬浪況建議！
+
+請複製以下格式填寫後回傳 👇
+
+━━━━━━━━━━━━
+性別：（男 / 女 / 其他）
+浪齡：（例：3）
+版型：（長板 / 短板 / 中長板）
+常衝浪點：（填入你常去的浪點）
+━━━━━━━━━━━━
+
+{spot_menu}"""
+
 # ── 回覆確認訊息 ──────────────────────────────────────────────
 def build_profile_confirm(profile: dict) -> str:
     label = skill_label(profile.get("surf_years", 0))
@@ -98,7 +291,7 @@ def build_profile_confirm(profile: dict) -> str:
 📍 常衝浪點：{profile.get('fav_spots', '未填')}
 ⭐ 等級判定：{label}
 
-從明天起每日 06:00 我會依照你的程度
+從明天起每日 05:00 我會依照你的程度
 推送專屬客製化浪況早報給你！🌊
 
 隨時回傳新的資料可以更新你的衝浪檔案 🤙"""
@@ -109,6 +302,18 @@ def verify_signature(body: bytes, signature: str) -> bool:
     hash_val = hmac.new(secret, body, hashlib.sha256).digest()
     expected = base64.b64encode(hash_val).decode("utf-8")
     return hmac.compare_digest(expected, signature)
+
+# ── 取得 LINE 顯示名稱 ────────────────────────────────────────
+def get_line_display_name(user_id: str) -> str:
+    url = f"https://api.line.me/v2/bot/profile/{user_id}"
+    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            return resp.json().get("displayName", user_id)
+    except Exception:
+        pass
+    return user_id
 
 # ── 推送訊息 ──────────────────────────────────────────────────
 def push_message(to: str, text: str) -> None:
@@ -122,6 +327,16 @@ def push_message(to: str, text: str) -> None:
     if resp.status_code != 200:
         print(f"[Push 失敗] {resp.status_code} {resp.text}")
 
+# ── Reply Flex Message ────────────────────────────────────────
+def reply_flex(reply_token: str, flex: dict) -> None:
+    url = "https://api.line.me/v2/bot/message/reply"
+    headers = {
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {"replyToken": reply_token, "messages": [flex]}
+    requests.post(url, headers=headers, json=payload, timeout=10)
+
 # ── Reply Message ─────────────────────────────────────────────
 def reply_message(reply_token: str, text: str) -> None:
     url = "https://api.line.me/v2/bot/message/reply"
@@ -134,6 +349,11 @@ def reply_message(reply_token: str, text: str) -> None:
         "messages": [{"type": "text", "text": text}],
     }
     requests.post(url, headers=headers, json=payload, timeout=10)
+
+# ── Health Check ─────────────────────────────────────────────
+@app.route("/health", methods=["GET"])
+def health():
+    return "OK", 200
 
 # ── Webhook 主路由 ────────────────────────────────────────────
 @app.route("/webhook", methods=["POST"])
@@ -171,9 +391,24 @@ def webhook():
             msg_text = event["message"]["text"]
             user_id  = source.get("userId", "")
 
-            # 查詢自己 ID
-            if any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是"]):
-                reply_message(reply_token, f"你的 LINE User ID 是：\n{user_id}")
+            # ── 圖文選單觸發 ──────────────────────────────────
+            if "🔍 即時浪況查詢" in msg_text:
+                reply_message(reply_token, SPOT_QUERY_HINT)
+
+            elif "📝 Surfer 檔案建立" in msg_text:
+                reply_message(reply_token, PROFILE_FORM)
+
+            elif "📚 專業海象觀測網" in msg_text:
+                reply_flex(reply_token, build_ocean_links_flex())
+
+            elif "🗺️ Windy 動態地圖" in msg_text:
+                reply_message(reply_token,
+                    f"🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\n{STREAMLIT_URL}")
+
+            # 查詢自己名稱
+            elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):
+                name = get_line_display_name(user_id)
+                reply_message(reply_token, f"你好，{name}！\n你的 LINE 名稱是：{name}")
 
             # 填寫/更新 Profile
             elif "性別" in msg_text and "浪齡" in msg_text:
@@ -191,7 +426,23 @@ def webhook():
                 if p:
                     reply_message(reply_token, build_profile_confirm(p))
                 else:
-                    reply_message(reply_token, "還沒有你的衝浪檔案喔！\n請填寫個人資料讓我認識你 🏄")
+                    reply_message(reply_token, build_no_profile_prompt())
+
+            # 其餘訊息：先嘗試浪點查詢，否則引導未建檔用戶填資料
+            else:
+                query_spots = detect_query_spots(msg_text)
+                if query_spots:
+                    marine = fetch_marine_data()
+                    if marine:
+                        p = get_profile(user_id)
+                        reply_message(reply_token, build_instant_report(query_spots, marine, p))
+                    else:
+                        reply_message(reply_token, "⚠️ 目前無法取得氣象署資料，請稍後再試。")
+                else:
+                    p = get_profile(user_id)
+                    if not p:
+                        name = get_line_display_name(user_id)
+                        reply_message(reply_token, build_no_profile_prompt(name))
 
     return "OK", 200
 
