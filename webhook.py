@@ -6,11 +6,18 @@ import re
 import hashlib
 import hmac
 import base64
+import threading
+import time
+import schedule
 import requests
 from flask import Flask, request, abort
 from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, STREAMLIT_URL, get_surf_level
 from db import add_member, add_group, save_profile, get_profile
-from broadcast import fetch_marine_data, get_marine_data, swell_energy, is_offshore, SPOT_STATION_MAP, personal_rating
+from broadcast import (
+    fetch_marine_data, get_marine_data, swell_energy, is_offshore,
+    SPOT_STATION_MAP, personal_rating,
+    broadcast, check_swell_alerts, check_typhoon_alerts,
+)
 
 app = Flask(__name__)
 
@@ -449,6 +456,22 @@ def webhook():
                         reply_message(reply_token, build_no_profile_prompt(name))
 
     return "OK", 200
+
+
+# ── 背景排程執行緒（Render 上唯一跑排程的地方）──────────────
+def _run_scheduler():
+    schedule.every().day.at("05:00").do(broadcast)
+    schedule.every(3).hours.do(check_swell_alerts)
+    schedule.every(1).hours.do(check_typhoon_alerts)
+    print("🕐 排程啟動：每日 05:00 廣播 / 每 3h 長浪警戒 / 每 1h 颱風警報")
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+
+_scheduler_thread = threading.Thread(target=_run_scheduler, daemon=True)
+_scheduler_thread.start()
+
 
 if __name__ == "__main__":
     import os

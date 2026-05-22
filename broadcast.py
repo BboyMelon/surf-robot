@@ -489,6 +489,162 @@ def broadcast():
     print(f"  ✅ 廣播完成：{ok} 成功 / {fail} 失敗 / {total} 總計")
 
 
+# ── 警戒閾值設定 ─────────────────────────────────────────
+SWELL_HEIGHT_THRESHOLD = 1.5   # m，超過才觸發
+SWELL_PERIOD_THRESHOLD = 8.0   # s，超過才觸發
+SWELL_ALERT_COOLDOWN   = 6     # 同一站至少間隔幾小時才再推
+
+# 內存 de-dup 狀態（Render 重啟後重置，可接受）
+_last_swell_alert: dict = {}   # {station_id: datetime}
+_alerted_typhoon_ids: set = set()
+
+CWA_TYPHOON_URL = (
+    "https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0034-005"
+    f"?Authorization={CWA_API_KEY}&format=JSON"
+)
+
+
+def push_alert_to_all(msg: str):
+    """推播警戒訊息給所有個人訂閱者 + 群組。"""
+    ok = fail = 0
+    for m in get_all_members():
+        lid = m.get("line_id", "")
+        if lid and lid.startswith("U"):
+            if push_line_message(lid, msg):
+                ok += 1
+            else:
+                fail += 1
+    for g in get_all_groups():
+        gid = g.get("group_id", "")
+        if gid:
+            if push_line_message(gid, msg):
+                ok += 1
+            else:
+                fail += 1
+    print(f"  [警戒推播] {ok} 成功 / {fail} 失敗")
+
+
+def check_swell_alerts():
+    """
+    每 3 小時自動執行。波高 >= 1.5m 且週期 >= 8s → 立即推播長浪警戒。
+    同一浮標站 6 小時內最多推一次（in-memory de-dup）。
+    """
+    now = datetime.now()
+    print(f"[{now.strftime('%Y-%m-%d %H:%M')}] 🔍 長浪警戒檢查中...")
+
+    marine = get_marine_data()
+    if not marine:
+        print("  ⚠️ 無法取得浮標資料，跳過")
+        return
+
+    # 以浮標站為單位，收集超標浪點
+    triggered: dict = {}  # {station_id: [(spot_name, wh, wp), ...]}
+
+    for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
+        sid  = SPOT_STATION_MAP.get(spot_name)
+        data = marine.get(sid, {}) if sid else {}
+        wh   = data.get("wave_height", 0.0)
+        wp   = data.get("wave_period", 0.0)
+
+        if wh >= SWELL_HEIGHT_THRESHOLD and wp >= SWELL_PERIOD_THRESHOLD:
+            last = _last_swell_alert.get(sid)
+            if last is None or (now - last).total_seconds() > SWELL_ALERT_COOLDOWN * 3600:
+                triggered.setdefault(sid, []).append((spot_name, wh, wp))
+
+    if not triggered:
+        print("  ✅ 各浪點均在安全範圍內")
+        return
+
+    for sid in triggered:
+        _last_swell_alert[sid] = now
+
+    lines = [
+        "🚨 長浪警戒通知 🚨",
+        f"📅 {now.strftime('%Y-%m-%d %H:%M')}",
+        "",
+        "偵測到以下浪點出現危險長浪：",
+        "",
+    ]
+    for sid, spots in triggered.items():
+        for spot_name, wh, wp in spots:
+            energy   = swell_energy(wh, wp)
+            level    = get_surf_level(wh, wp)
+            cfg      = SURF_SPOTS_CONFIG.get(spot_name, {})
+            lines += [
+                f"📍 {spot_name}",
+                f"🌊 浪高：{wh:.1f}m ｜ 週期：{wp:.1f}s",
+                f"⚡ 湧浪能量：{energy}",
+                f"🏄 級別：{level['label']}",
+                f"⚠️ {cfg.get('safety_note', '')}",
+                "",
+            ]
+    lines += [
+        "──────────────────",
+        "⛔ 危險海況，強烈建議暫停入水",
+        "📡 即時監測：浪況機器人自動偵測",
+    ]
+
+    print(f"  🚨 觸發長浪警戒：{list(triggered.keys())}")
+    push_alert_to_all("\n".join(lines))
+
+
+def check_typhoon_alerts():
+    """
+    每 1 小時自動執行。呼叫 CWA W-C0034-005，
+    出現新颱風警報（ID 未推播過）時立即通知所有訂閱者。
+    Render 海外 IP 可能被封鎖，例外一律靜默忽略。
+    """
+    now = datetime.now()
+    print(f"[{now.strftime('%Y-%m-%d %H:%M')}] 🌀 颱風警報檢查中...")
+
+    try:
+        resp = requests.get(CWA_TYPHOON_URL, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        typhoons = (
+            data.get("records", {}).get("Typhoon") or
+            data.get("Records", {}).get("Typhoon") or
+            []
+        )
+
+        if not typhoons:
+            print("  ✅ 目前無颱風警報")
+            return
+
+        for ty in typhoons:
+            ty_id       = ty.get("CWA_TyphoonID", "")
+            ty_name     = ty.get("TyphoonName", "未知")
+            ty_name_eng = ty.get("TyphoonNameEng", "")
+            warn_level  = ty.get("WarningLevel", "颱風警報")
+
+            if not ty_id or ty_id in _alerted_typhoon_ids:
+                continue
+
+            _alerted_typhoon_ids.add(ty_id)
+
+            lines = [
+                "🌀 颱風警報通知 🌀",
+                f"📅 {now.strftime('%Y-%m-%d %H:%M')}",
+                "",
+                "⚠️ 中央氣象署已發布颱風警報！",
+                "",
+                f"🌀 颱風名稱：{ty_name}（{ty_name_eng}）",
+                f"🔴 警報層級：{warn_level}",
+                "",
+                "🏄 衝浪活動建議暫停，海況危險！",
+                "📻 請持續收聽最新氣象預報",
+                "🏥 注意人身安全，遠離海邊",
+                "──────────────────",
+                "📡 資料：中央氣象署 W-C0034-005",
+            ]
+            print(f"  🌀 偵測到颱風警報：{ty_name}（{ty_id}）")
+            push_alert_to_all("\n".join(lines))
+
+    except Exception as e:
+        print(f"  [颱風 API 錯誤] {e}")
+
+
 # ── 執行入口 ─────────────────────────────────────────────
 if __name__ == "__main__":
     if "--now" in sys.argv:
