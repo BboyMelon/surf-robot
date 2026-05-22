@@ -124,9 +124,9 @@ def fetch_marine_data() -> dict:
             result[sid] = {
                 "wave_height": safe_float(we.get("WaveHeight")),
                 "wave_period": safe_float(we.get("WavePeriod")),
-                "wave_dir":    we.get("WaveDirectionDescription", ""),
+                "wave_dir":    we.get("WaveDirectionDescription") or "—",
                 "wind_speed":  safe_float(anemo.get("WindSpeed")),
-                "wind_dir":    anemo.get("WindDirectionDescription", ""),
+                "wind_dir":    anemo.get("WindDirectionDescription") or "—",
                 "tide_height": safe_float(we.get("TideHeight")),
                 "tide_level":  we.get("TideLevel", ""),
                 "sea_temp":    safe_float(we.get("SeaTemperature")),
@@ -303,8 +303,8 @@ def build_report(marine: dict) -> str:
 
         wave_h   = data.get("wave_height", 0.0)
         period   = data.get("wave_period", 0.0)
-        wave_dir = data.get("wave_dir", "—")
-        wind_dir = data.get("wind_dir", "—")
+        wave_dir = data.get("wave_dir") or "—"
+        wind_dir = data.get("wind_dir") or "—"
         wind_spd = data.get("wind_speed", 0.0)
 
         energy     = swell_energy(wave_h, period)
@@ -389,34 +389,35 @@ def build_personal_report(marine: dict, profile: dict) -> str:
         cat = spot_cfg.get("category", "")
         if cat != current_cat:
             current_cat = cat
-            lines.append(f"{'═'*16}\n{cat}\n{'═'*16}")
+            lines.append(f"\n── {cat} ──")
 
         wave_h   = data.get("wave_height", 0.0)
         period   = data.get("wave_period", 0.0)
-        wave_dir = data.get("wave_dir", "—")
-        wind_dir = data.get("wind_dir", "—")
+        wave_dir = data.get("wave_dir") or "—"
+        wind_dir = data.get("wind_dir") or "—"
         wind_spd = data.get("wind_speed", 0.0)
-        obs_dt   = data.get("datetime", "")[:16].replace("T", " ")
 
-        offshore     = is_offshore(wind_dir, spot_cfg["offshore_wind"])
-        offshore_tag = "✅ 陸風" if offshore else "❌ 向岸"
-        swell_warn   = " ⚠️ 長浪警戒！" if (period > 8 and wave_h > 1.5) else ""
-        p_rating     = personal_rating(wave_h, period, profile)
+        offshore   = is_offshore(wind_dir, spot_cfg["offshore_wind"])
+        wind_tag   = "✅陸風" if offshore else "❌向岸"
+        swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
+        level      = get_surf_level(wave_h, period)
+        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
+        energy     = swell_energy(wave_h, period)
+        p_rating   = personal_rating(wave_h, period, profile)
 
         if wave_h == 0.0 and period == 0.0:
-            lines.append(f"📍 {spot_name}\n⚠️ 暫無觀測資料\n")
+            lines.append(f"┌ 📍 {spot_name}")
+            lines.append(f"└ ⚠️ 暫無觀測資料")
             continue
 
-        lines.append(
-            f"📍 {spot_name}\n"
-            f"🌊 {wave_h:.1f}m{swell_warn} ⏱{period:.1f}s 🧭{wave_dir}\n"
-            f"💨 {wind_dir} {wind_spd:.1f}m/s {offshore_tag}\n"
-            f"👤 {p_rating}\n"
-            f"⚠️ {spot_cfg['safety_note']}\n"
-        )
+        lines.append(f"┌ 📍 {spot_name}{swell_warn}  {level['emoji']} 浪人推薦：{level_zh}  {wind_tag}")
+        lines.append(f"│ 🌊{wave_h:.1f}m·{period:.0f}s·{wave_dir}  💨{wind_dir} {wind_spd:.1f}m/s  ⚡{energy}")
+        lines.append(f"│ 👤 {p_rating}")
+        lines.append(f"└ ⚠️ {spot_cfg['safety_note']}")
 
-    lines.append("─────────────────")
-    lines.append("📡 中央氣象署 O-B0075-001")
+    source = marine.get("_meta", {}).get("source", "cwa")
+    lines.append("")
+    lines.append("📡 " + ("Open-Meteo Marine（備援模式）" if source == "open-meteo" else "中央氣象署 O-B0075-001"))
     return "\n".join(lines)
 
 
