@@ -117,11 +117,12 @@ def save_profile(line_id: str, profile: dict) -> Tuple[bool, str]:
     """新增或更新使用者衝浪檔案。"""
     try:
         data = {
-            "line_id":    line_id,
-            "gender":     profile.get("gender", ""),
-            "surf_years": profile.get("surf_years", 0),
-            "board_type": profile.get("board_type", ""),
-            "fav_spots":  profile.get("fav_spots", ""),
+            "line_id":      line_id,
+            "gender":       profile.get("gender", ""),
+            "surf_years":   profile.get("surf_years", 0),
+            "board_type":   profile.get("board_type", ""),
+            "fav_spots":    profile.get("fav_spots", ""),
+            "display_name": profile.get("display_name", ""),
         }
         if USE_SUPABASE:
             _sb.table("profiles").upsert(data, on_conflict="line_id").execute()
@@ -129,16 +130,38 @@ def save_profile(line_id: str, profile: dict) -> Tuple[bool, str]:
             conn = sqlite3.connect(SQLITE_PATH)
             conn.execute(
                 """INSERT OR REPLACE INTO profiles
-                   (line_id, gender, surf_years, board_type, fav_spots)
-                   VALUES (?,?,?,?,?)""",
+                   (line_id, gender, surf_years, board_type, fav_spots, display_name)
+                   VALUES (?,?,?,?,?,?)""",
                 (line_id, data["gender"], data["surf_years"],
-                 data["board_type"], data["fav_spots"])
+                 data["board_type"], data["fav_spots"], data["display_name"])
             )
             conn.commit()
             conn.close()
         return True, "Profile 已儲存"
     except Exception as e:
         return False, str(e)
+
+
+def update_display_name(line_id: str, display_name: str):
+    """任何互動時更新 LINE 顯示名稱（upsert 只寫 display_name）。"""
+    try:
+        if USE_SUPABASE:
+            _sb.table("profiles").upsert(
+                {"line_id": line_id, "display_name": display_name},
+                on_conflict="line_id"
+            ).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute(
+                """INSERT INTO profiles (line_id, display_name)
+                   VALUES (?,?)
+                   ON CONFLICT(line_id) DO UPDATE SET display_name=excluded.display_name""",
+                (line_id, display_name)
+            )
+            conn.commit()
+            conn.close()
+    except Exception:
+        pass
 
 def get_profile(line_id: str) -> Optional[dict]:
     """取得單一使用者的 Profile，找不到回傳 None。"""

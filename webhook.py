@@ -12,7 +12,7 @@ import schedule
 import requests
 from flask import Flask, request, abort
 from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, STREAMLIT_URL, get_surf_level
-from db import add_member, add_group, save_profile, get_profile
+from db import add_member, add_group, save_profile, get_profile, update_display_name
 from broadcast import (
     fetch_marine_data, get_marine_data, swell_energy, is_offshore,
     SPOT_STATION_MAP, personal_rating,
@@ -401,6 +401,11 @@ def webhook():
         elif event_type == "message" and event.get("message", {}).get("type") == "text":
             msg_text = event["message"]["text"]
             user_id  = source.get("userId", "")
+
+            # 每次互動自動更新 LINE 顯示名稱
+            if user_id:
+                display_name = get_line_display_name(user_id)
+                update_display_name(user_id, display_name)
 
             # ── 圖文選單觸發 ──────────────────────────────────
             if "🔍 即時浪況查詢" in msg_text:
