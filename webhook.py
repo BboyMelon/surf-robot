@@ -34,8 +34,8 @@ def build_spot_menu() -> str:
 
 # ── 地區關鍵字 → 浪點對應 ─────────────────────────────────────
 REGION_SPOTS = {
-    "北部": ["金山沙珠灣", "翡翠灣"],
-    "宜蘭": ["宜蘭外澳", "烏石港"],
+    "北部": ["金山沙珠灣", "翡翠灣", "中角灣", "烏石港"],
+    "宜蘭": ["宜蘭外澳"],
     "中部": ["台中松柏港", "外埔"],
     "東部": ["花蓮北濱公園", "花蓮環保公園", "台東金樽", "台東東河"],
     "花蓮": ["花蓮北濱公園", "花蓮環保公園"],
@@ -61,7 +61,7 @@ def detect_query_spots(text: str) -> list:
                 matched.append(spot)
     # 短名稱比對（例：烏石港、外澳、南灣、金山、外埔）
     SHORT_MAP = {
-        "外澳": "宜蘭外澳", "烏石": "烏石港",
+        "外澳": "宜蘭外澳", "烏石": "烏石港", "中角": "中角灣",
         "北濱": "花蓮北濱公園", "環保公園": "花蓮環保公園",
         "金樽": "台東金樽", "東河": "台東東河",
         "漁光": "台南漁光島", "南灣": "恆春南灣",
@@ -93,35 +93,32 @@ def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str
         wind_spd = data.get("wind_speed", 0.0)
 
         if wave_h == 0.0 and period == 0.0:
-            lines.append(f"📍 {spot_name}\n⚠️ 目前無觀測資料\n")
+            lines.append(f"┌ 📍 {spot_name}")
+            lines.append(f"└ ⚠️ 暫無觀測資料")
+            lines.append("")
             continue
 
-        offshore     = is_offshore(wind_dir, cfg.get("offshore_wind", []))
-        offshore_tag = "✅ 陸風" if offshore else "❌ 向岸風"
-        level        = get_surf_level(wave_h, period)
-        energy       = swell_energy(wave_h, period)
-        swell_warn   = " ⚠️ 長浪警戒！" if (period > 8 and wave_h > 1.5) else ""
+        offshore   = is_offshore(wind_dir, cfg.get("offshore_wind", []))
+        wind_tag   = "✅陸風" if offshore else "❌向岸風"
+        level      = get_surf_level(wave_h, period)
+        energy     = swell_energy(wave_h, period)
+        swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
+        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
 
-        lines.append(f"📍 {spot_name}")
-        lines.append(f"🌊 浪高 {wave_h:.1f}m{swell_warn}｜週期 {period:.1f}s｜{wave_dir}")
-        lines.append(f"💨 {wind_dir} {wind_spd:.1f}m/s {offshore_tag}")
-        lines.append(f"🏄 GoOcean：{level['label']}")
-        lines.append(f"⚡ 湧浪能量：{energy}")
+        lines.append(f"┌ 📍 {spot_name}{swell_warn}")
+        lines.append(f"│ 🌊 {wave_h:.1f}m · {period:.1f}s · {wave_dir}  💨{wind_dir} {wind_spd:.1f}m/s")
+        lines.append(f"│ {level['emoji']} 浪人推薦：{level_zh}  {wind_tag}  ⚡{energy}")
 
         if profile:
             rating = personal_rating(wave_h, period, profile)
-            lines.append(f"👤 {rating}")
+            lines.append(f"│ 👤 {rating}")
 
         safety = cfg.get("safety_note", "")
-        if safety:
-            lines.append(f"⚠️ {safety}")
+        lines.append(f"└ ⚠️ {safety}" if safety else "└ ─")
         lines.append("")
 
     source = marine.get("_meta", {}).get("source", "cwa")
-    if source == "open-meteo":
-        lines.append("📡 資料：Open-Meteo Marine（模型預報）")
-    else:
-        lines.append("📡 資料來源：中央氣象署 O-B0075-001")
+    lines.append("📡 " + ("Open-Meteo Marine（模型預報）" if source == "open-meteo" else "中央氣象署 O-B0075-001"))
     return "\n".join(lines)
 
 # ── 加好友歡迎訊息 ────────────────────────────────────────────

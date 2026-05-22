@@ -26,10 +26,11 @@ CWA_MARINE_URL = (
 SPOT_STATION_MAP = {
     # 北部
     "金山沙珠灣": "46778A",   # 北部外海浮標
-    "翡翠灣":     "C6AH2",    # 東北角外海浮標（萬里/翡翠灣附近）
+    "翡翠灣":     "C6AH2",    # 東北角外海浮標
+    "中角灣":     "46778A",   # 北部外海浮標（石門/金山海域）
+    "烏石港":     "46757B",   # 東北角外海浮標
     # 宜蘭
     "宜蘭外澳":   "46757B",   # 東北角外海浮標
-    "烏石港":     "46757B",   # 外澳/烏石港共用同一浮標（相鄰）
     # 中部
     "台中松柏港": "46714D",   # 台灣海峽中部浮標
     "外埔":       "COMC08",   # 台灣海峽中部浮標（外埔附近）
@@ -56,9 +57,9 @@ WIND_DIR_MAP = {
 
 # ── 浮標站 GPS 座標（供 Open-Meteo fallback 使用）──────────
 STATION_COORDS = {
-    "46778A": (25.30, 121.70),  # 北部外海（金山附近）
+    "46778A": (25.30, 121.70),  # 北部外海（金山/中角灣）
     "C6AH2":  (25.10, 122.00),  # 東北角外海（翡翠灣）
-    "46757B": (24.90, 122.00),  # 宜蘭外海（外澳/烏石港）
+    "46757B": (24.90, 122.00),  # 東北角外海（烏石港/外澳）
     "46714D": (24.20, 120.30),  # 台灣海峽中部（松柏港）
     "COMC08": (24.40, 120.50),  # 台灣海峽中部（外埔）
     "46706A": (24.00, 121.80),  # 花蓮外海
@@ -295,7 +296,7 @@ def build_report(marine: dict) -> str:
         cat = spot_cfg.get("category", "")
         if cat != current_category:
             current_category = cat
-            lines.append(f"{'═'*16}\n{cat}\n{'═'*16}")
+            lines.append(f"\n── {cat} ──")
 
         station_id = SPOT_STATION_MAP.get(spot_name)
         data       = marine.get(station_id, {})
@@ -305,51 +306,28 @@ def build_report(marine: dict) -> str:
         wave_dir = data.get("wave_dir", "—")
         wind_dir = data.get("wind_dir", "—")
         wind_spd = data.get("wind_speed", 0.0)
-        tide_h   = data.get("tide_height")   # 可能為 None（Open-Meteo）
-        tide_lv  = data.get("tide_level", "—")
-        sea_t    = data.get("sea_temp")      # 可能為 None（Open-Meteo）
-        obs_dt   = data.get("datetime", "")[:16].replace("T", " ")
 
-        sea_t_str = f"{sea_t:.1f}°C" if sea_t is not None else "—"
-        tide_str  = f"{tide_h:.2f}m（{tide_lv}）" if tide_h is not None else "—"
-
-        energy       = swell_energy(wave_h, period)
-        level        = get_surf_level(wave_h, period)
-        offshore     = is_offshore(wind_dir, spot_cfg["offshore_wind"])
-        offshore_tag = "✅ 黃金陸風" if offshore else "❌ 向岸風"
-        swell_warn   = " ⚠️ 長浪警戒！" if (period > 8 and wave_h > 1.5) else ""
+        energy     = swell_energy(wave_h, period)
+        level      = get_surf_level(wave_h, period)
+        offshore   = is_offshore(wind_dir, spot_cfg["offshore_wind"])
+        wind_tag   = "✅陸風" if offshore else "❌向岸"
+        swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
+        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
 
         if wave_h == 0.0 and period == 0.0:
-            lines.append(
-                f"📍 {spot_name}\n"
-                f"━━━━━━━━━━━━\n"
-                f"📡 站碼：{station_id}\n"
-                f"⚠️ 暫無即時觀測資料\n"
-            )
+            lines.append(f"┌ 📍 {spot_name}")
+            lines.append(f"└ ⚠️ 暫無觀測資料")
             continue
 
-        lines.append(
-            f"📍 {spot_name}\n"
-            f"━━━━━━━━━━━━\n"
-            f"🌊 浪高：{wave_h:.1f}m{swell_warn}\n"
-            f"⏱ 週期：{period:.1f}s\n"
-            f"🧭 浪向：{wave_dir}\n"
-            f"💨 風向：{wind_dir} {wind_spd:.1f}m/s {offshore_tag}\n"
-            f"🌡 水溫：{sea_t_str}\n"
-            f"🕐 潮位：{tide_str}\n"
-            f"⚡ 湧浪能量：{energy}\n"
-            f"🏄 分級：{level['label']}\n"
-            f"⚠️ {spot_cfg['safety_note']}\n"
-            f"🕒 觀測時間：{obs_dt}\n"
-        )
+        lines.append(f"┌ 📍 {spot_name}{swell_warn}  {level['emoji']} 浪人推薦：{level_zh}  {wind_tag}")
+        lines.append(f"└ 🌊{wave_h:.1f}m·{period:.0f}s·{wave_dir}  💨{wind_dir} {wind_spd:.1f}m/s  ⚡{energy}")
 
-    lines.append("─────────────────")
+    lines.append("")
     if source == "open-meteo":
-        lines.append("📡 資料：Open-Meteo Marine（模型預報）")
-        lines.append("⚠️ 潮位/水溫暫不顯示（海外伺服器備援模式）")
+        lines.append("📡 Open-Meteo Marine（備援模式）")
     else:
-        lines.append("📡 資料：中央氣象署 O-B0075-001")
-    lines.append("🗺️ 地圖：goocean.namr.gov.tw")
+        lines.append("📡 中央氣象署 O-B0075-001")
+    lines.append("🗺️ goocean.namr.gov.tw")
 
     return "\n".join(lines)
 
