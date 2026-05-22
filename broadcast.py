@@ -489,6 +489,59 @@ def broadcast():
     print(f"  ✅ 廣播完成：{ok} 成功 / {fail} 失敗 / {total} 總計")
 
 
+# ── 未填資料提醒 ──────────────────────────────────────────
+PROFILE_REMINDER = """👋 嗨！你還沒建立衝浪檔案喔～
+
+填寫後可以解鎖：
+✅ 每日專屬浪況早報（只顯示你常去的浪點）
+✅ 根據浪齡給出個人化建議
+✅ 板型適合度提示
+
+請複製以下格式，填寫後直接回傳 👇
+
+━━━━━━━━━━━━
+性別：（男 / 女 / 其他）
+浪齡：（例：3）
+版型：（長板 / 短板 / 中長板）
+常衝浪點：（填入你常去的浪點）
+━━━━━━━━━━━━
+
+填完後每日 05:00 就會收到專屬浪況早報 🌊"""
+
+
+def remind_incomplete_profiles() -> dict:
+    """
+    找出所有尚未填寫完整 Profile 的訂閱者，推播填寫提醒。
+    「未完整」= 沒有 profiles 記錄，或 gender/surf_years/board_type 任一為空。
+    回傳推播結果統計。
+    """
+    members  = get_all_members()
+    profiles = {p["line_id"]: p for p in get_all_profiles()}
+
+    incomplete = []
+    for m in members:
+        lid = m.get("line_id", "")
+        if not lid or not lid.startswith("U"):
+            continue
+        p = profiles.get(lid)
+        if not p:
+            incomplete.append(lid)
+            continue
+        # 任一必填欄位為空 → 視為未完整
+        if not p.get("gender") or not p.get("board_type") or not p.get("surf_years"):
+            incomplete.append(lid)
+
+    ok = fail = 0
+    for lid in incomplete:
+        if push_line_message(lid, PROFILE_REMINDER):
+            ok += 1
+        else:
+            fail += 1
+
+    print(f"[提醒] 未填資料用戶：{len(incomplete)} 人，推播 {ok} 成功 / {fail} 失敗")
+    return {"total": len(incomplete), "ok": ok, "fail": fail}
+
+
 # ── 警戒閾值設定 ─────────────────────────────────────────
 SWELL_HEIGHT_THRESHOLD = 1.5   # m，超過才觸發
 SWELL_PERIOD_THRESHOLD = 8.0   # s，超過才觸發

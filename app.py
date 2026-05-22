@@ -6,6 +6,7 @@
 import streamlit as st
 import pandas as pd
 from db import add_member, get_all_members, get_all_groups, get_all_profiles
+from broadcast import remind_incomplete_profiles
 from config import ADMIN_PASSWORD
 
 st.set_page_config(
@@ -48,6 +49,16 @@ with st.sidebar:
             st.dataframe(df_p[show_cols_p], use_container_width=True)
         else:
             st.info("尚無用戶檔案")
+
+        st.divider()
+        st.subheader("📣 推播管理")
+        if st.button("⚠️ 提醒未填資料的用戶", use_container_width=True):
+            with st.spinner("推播中..."):
+                result = remind_incomplete_profiles()
+            if result["total"] == 0:
+                st.success("✅ 所有訂閱者都已填寫完整資料！")
+            else:
+                st.success(f"✅ 已推播 {result['ok']} 人 / 失敗 {result['fail']} 人（共 {result['total']} 位未填完）")
 
         if st.button("🔄 重新整理"):
             st.rerun()
