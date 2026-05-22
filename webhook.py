@@ -416,7 +416,7 @@ def webhook():
 
             elif "🗺️ Windy 動態地圖" in msg_text:
                 reply_message(reply_token,
-                    f"🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\n{STREAMLIT_URL}")
+                    "🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\nhttps://www.windy.com/?waves,23.8,121.8,6")
 
             # 查詢自己名稱
             elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):
