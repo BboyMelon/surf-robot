@@ -1,6 +1,6 @@
 """
 每日定時廣播 — broadcast.py
-資料來源：CWA O-B0075-001（海象監測-48小時浮標站）
+資料來源：CWA O-B0075-001（主要），Open-Meteo Marine（fallback）
 流程：抓浮標 API → Swell Eye 能量分析 → 比對陸風 → LINE Push 廣播
 執行方式：
   - 立即測試：python broadcast.py --now
@@ -53,6 +53,28 @@ WIND_DIR_MAP = {
     "S": "南", "SSW": "南南西", "SW": "西南", "WSW": "西南西",
     "W": "西", "WNW": "西北西", "NW": "西北", "NNW": "北北西",
 }
+
+# ── 浮標站 GPS 座標（供 Open-Meteo fallback 使用）──────────
+STATION_COORDS = {
+    "46778A": (25.30, 121.70),  # 北部外海（金山附近）
+    "C6AH2":  (25.10, 122.00),  # 東北角外海（翡翠灣）
+    "46757B": (24.90, 122.00),  # 宜蘭外海（外澳/烏石港）
+    "46714D": (24.20, 120.30),  # 台灣海峽中部（松柏港）
+    "COMC08": (24.40, 120.50),  # 台灣海峽中部（外埔）
+    "46706A": (24.00, 121.80),  # 花蓮外海
+    "46761F": (23.10, 121.50),  # 台東/成功外海（金樽/東河）
+    "46699A": (22.60, 120.20),  # 西南外海（台南漁光島）
+    "46694A": (21.90, 120.90),  # 南部外海（墾丁南灣/佳樂水）
+    "C6S94":  (22.10, 121.20),  # 恆春半島東側（九鵬）
+}
+
+
+def degrees_to_compass(deg: float) -> str:
+    """角度（0-360）轉羅盤方向縮寫。"""
+    dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+            "S","SSW","SW","WSW","W","WNW","NW","NNW"]
+    return dirs[round(deg / 22.5) % 16]
+
 
 # ── 步驟 A：抓取 CWA 浮標觀測資料 ───────────────────────
 def fetch_marine_data() -> dict:
@@ -114,6 +136,91 @@ def fetch_marine_data() -> dict:
         print(f"[CWA API 錯誤] {e}")
 
     return result
+
+
+# ── 步驟 A2：Open-Meteo Marine API（Render 可存取的 fallback）──
+def fetch_marine_data_openmeteo() -> dict:
+    """
+    使用 Open-Meteo Marine API 取得波浪/風況資料。
+    免費、無 API Key、全球 IP 均可存取。
+    海溫/潮位無法取得，以 None 回傳（顯示時會改為「—」）。
+    """
+    result = {}
+    try:
+        station_ids = list(STATION_COORDS.keys())
+        lats = ",".join(str(STATION_COORDS[s][0]) for s in station_ids)
+        lons = ",".join(str(STATION_COORDS[s][1]) for s in station_ids)
+
+        # 波浪資料（Open-Meteo Marine API）
+        marine_resp = requests.get(
+            "https://marine-api.open-meteo.com/v1/marine",
+            params={
+                "latitude": lats,
+                "longitude": lons,
+                "current": "wave_height,wave_period,wave_direction",
+                "timezone": "Asia/Taipei",
+            },
+            timeout=15,
+        )
+        marine_resp.raise_for_status()
+        marine_data = marine_resp.json()
+
+        # 風況資料（Open-Meteo Weather API）
+        wind_resp = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lats,
+                "longitude": lons,
+                "current": "wind_speed_10m,wind_direction_10m",
+                "timezone": "Asia/Taipei",
+            },
+            timeout=15,
+        )
+        wind_resp.raise_for_status()
+        wind_data = wind_resp.json()
+
+        # 多地點回傳 list，單一地點回傳 dict，統一轉成 list
+        marine_list = marine_data if isinstance(marine_data, list) else [marine_data]
+        wind_list   = wind_data   if isinstance(wind_data,   list) else [wind_data]
+
+        now_str = datetime.now().strftime("%Y-%m-%dT%H:%M")
+
+        for i, sid in enumerate(station_ids):
+            mc = marine_list[i].get("current", {}) if i < len(marine_list) else {}
+            wc = wind_list[i].get("current", {})   if i < len(wind_list)   else {}
+
+            wave_dir_deg = float(mc.get("wave_direction") or 0.0)
+            wind_dir_deg = float(wc.get("wind_direction_10m") or 0.0)
+
+            result[sid] = {
+                "wave_height": float(mc.get("wave_height")    or 0.0),
+                "wave_period": float(mc.get("wave_period")    or 0.0),
+                "wave_dir":    degrees_to_compass(wave_dir_deg),
+                "wind_speed":  float(wc.get("wind_speed_10m") or 0.0),
+                "wind_dir":    degrees_to_compass(wind_dir_deg),
+                "tide_height": None,   # Open-Meteo 不提供潮位
+                "tide_level":  "—",
+                "sea_temp":    None,   # Open-Meteo 不提供海溫
+                "datetime":    now_str,
+            }
+
+        result["_meta"] = {"source": "open-meteo"}
+        print(f"[Open-Meteo] 成功取得 {len(station_ids)} 個浮標站資料")
+
+    except Exception as e:
+        print(f"[Open-Meteo API 錯誤] {e}")
+
+    return result
+
+
+# ── 資料取得入口（CWA 優先，失敗改用 Open-Meteo）────────────
+def get_marine_data() -> dict:
+    """優先用 CWA 浮標資料；Render 環境被封鎖時自動切換 Open-Meteo。"""
+    data = fetch_marine_data()
+    if not data:
+        print("[資料切換] CWA 無回應，改用 Open-Meteo Marine API")
+        data = fetch_marine_data_openmeteo()
+    return data
 
 
 # ── Swell Eye：湧浪能量 ───────────────────────────────────
@@ -179,6 +286,7 @@ def personal_rating(wave_h: float, period: float, profile: dict) -> str:
 # ── 組裝每日浪況簡報 ──────────────────────────────────────
 def build_report(marine: dict) -> str:
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    source = marine.get("_meta", {}).get("source", "cwa")
     lines = [f"🌊 每日浪況早報\n📅 {today}\n"]
 
     current_category = ""
@@ -197,10 +305,13 @@ def build_report(marine: dict) -> str:
         wave_dir = data.get("wave_dir", "—")
         wind_dir = data.get("wind_dir", "—")
         wind_spd = data.get("wind_speed", 0.0)
-        tide_h   = data.get("tide_height", 0.0)
+        tide_h   = data.get("tide_height")   # 可能為 None（Open-Meteo）
         tide_lv  = data.get("tide_level", "—")
-        sea_t    = data.get("sea_temp", 0.0)
+        sea_t    = data.get("sea_temp")      # 可能為 None（Open-Meteo）
         obs_dt   = data.get("datetime", "")[:16].replace("T", " ")
+
+        sea_t_str = f"{sea_t:.1f}°C" if sea_t is not None else "—"
+        tide_str  = f"{tide_h:.2f}m（{tide_lv}）" if tide_h is not None else "—"
 
         energy       = swell_energy(wave_h, period)
         level        = get_surf_level(wave_h, period)
@@ -224,8 +335,8 @@ def build_report(marine: dict) -> str:
             f"⏱ 週期：{period:.1f}s\n"
             f"🧭 浪向：{wave_dir}\n"
             f"💨 風向：{wind_dir} {wind_spd:.1f}m/s {offshore_tag}\n"
-            f"🌡 水溫：{sea_t:.1f}°C\n"
-            f"🕐 潮位：{tide_h:.2f}m（{tide_lv}）\n"
+            f"🌡 水溫：{sea_t_str}\n"
+            f"🕐 潮位：{tide_str}\n"
             f"⚡ 湧浪能量：{energy}\n"
             f"🏄 分級：{level['label']}\n"
             f"⚠️ {spot_cfg['safety_note']}\n"
@@ -233,7 +344,11 @@ def build_report(marine: dict) -> str:
         )
 
     lines.append("─────────────────")
-    lines.append("📡 資料：中央氣象署 O-B0075-001")
+    if source == "open-meteo":
+        lines.append("📡 資料：Open-Meteo Marine（模型預報）")
+        lines.append("⚠️ 潮位/水溫暫不顯示（海外伺服器備援模式）")
+    else:
+        lines.append("📡 資料：中央氣象署 O-B0075-001")
     lines.append("🗺️ 地圖：goocean.namr.gov.tw")
 
     return "\n".join(lines)
@@ -330,9 +445,9 @@ def build_personal_report(marine: dict, profile: dict) -> str:
 def broadcast():
     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🌊 開始廣播...")
 
-    marine = fetch_marine_data()
+    marine = get_marine_data()
     if not marine:
-        print("  ⚠️ 無法取得浮標資料，廣播取消")
+        print("  ⚠️ 無法取得浮標資料（CWA + Open-Meteo 均失敗），廣播取消")
         return
 
     # 通用簡報（給群組 / 無 profile 的人）
@@ -379,9 +494,9 @@ if __name__ == "__main__":
     if "--now" in sys.argv:
         broadcast()
     else:
-        print("🌊 浪況廣播排程啟動，每日 06:00 發送...")
+        print("🌊 浪況廣播排程啟動，每日 05:00 發送...")
         print("   立即測試請用：python broadcast.py --now")
-        schedule.every().day.at("06:00").do(broadcast)
+        schedule.every().day.at("05:00").do(broadcast)
         while True:
             schedule.run_pending()
             time.sleep(30)

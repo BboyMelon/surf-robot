@@ -10,7 +10,7 @@ import requests
 from flask import Flask, request, abort
 from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, STREAMLIT_URL, get_surf_level
 from db import add_member, add_group, save_profile, get_profile
-from broadcast import fetch_marine_data, swell_energy, is_offshore, SPOT_STATION_MAP, personal_rating
+from broadcast import fetch_marine_data, get_marine_data, swell_energy, is_offshore, SPOT_STATION_MAP, personal_rating
 
 app = Flask(__name__)
 
@@ -110,7 +110,11 @@ def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str
             lines.append(f"⚠️ {safety}")
         lines.append("")
 
-    lines.append("📡 資料來源：中央氣象署 O-B0075-001")
+    source = marine.get("_meta", {}).get("source", "cwa")
+    if source == "open-meteo":
+        lines.append("📡 資料：Open-Meteo Marine（模型預報）")
+    else:
+        lines.append("📡 資料來源：中央氣象署 O-B0075-001")
     return "\n".join(lines)
 
 # ── 加好友歡迎訊息 ────────────────────────────────────────────
@@ -432,12 +436,12 @@ def webhook():
             else:
                 query_spots = detect_query_spots(msg_text)
                 if query_spots:
-                    marine = fetch_marine_data()
+                    marine = get_marine_data()
                     if marine:
                         p = get_profile(user_id)
                         reply_message(reply_token, build_instant_report(query_spots, marine, p))
                     else:
-                        reply_message(reply_token, "⚠️ 目前無法取得氣象署資料，請稍後再試。")
+                        reply_message(reply_token, "⚠️ 目前無法取得浪況資料，請稍後再試。")
                 else:
                     p = get_profile(user_id)
                     if not p:
