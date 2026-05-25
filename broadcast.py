@@ -97,7 +97,7 @@ def fetch_marine_data() -> dict:
     """
     result = {}
     try:
-        resp = requests.get(CWA_MARINE_URL, timeout=15)
+        resp = requests.get(CWA_MARINE_URL, timeout=8)
         resp.raise_for_status()
         d = resp.json()
 
@@ -161,7 +161,7 @@ def fetch_marine_data_openmeteo() -> dict:
                 "current": "wave_height,wave_period,wave_direction",
                 "timezone": "Asia/Taipei",
             },
-            timeout=15,
+            timeout=8,
         )
         marine_resp.raise_for_status()
         marine_data = marine_resp.json()
@@ -175,7 +175,7 @@ def fetch_marine_data_openmeteo() -> dict:
                 "current": "wind_speed_10m,wind_direction_10m",
                 "timezone": "Asia/Taipei",
             },
-            timeout=15,
+            timeout=8,
         )
         wind_resp.raise_for_status()
         wind_data = wind_resp.json()
@@ -238,7 +238,7 @@ def fetch_tomorrow_forecast() -> dict:
                 "start_date": tomorrow,
                 "end_date":   tomorrow,
             },
-            timeout=15,
+            timeout=8,
         )
         resp.raise_for_status()
         raw       = resp.json()
@@ -278,13 +278,17 @@ def fetch_tomorrow_forecast() -> dict:
     return result
 
 
-# ── 資料取得入口（CWA 優先，失敗改用 Open-Meteo）────────────
+# ── 資料取得入口（CWA 優先，失敗改用 Open-Meteo，最多 retry 2 次）──
 def get_marine_data() -> dict:
-    """優先用 CWA 浮標資料；Render 環境被封鎖時自動切換 Open-Meteo。"""
+    """優先用 CWA 浮標資料；失敗自動切換 Open-Meteo，並 retry 2 次。"""
     data = fetch_marine_data()
     if not data:
         print("[資料切換] CWA 無回應，改用 Open-Meteo Marine API")
-        data = fetch_marine_data_openmeteo()
+        for attempt in range(1, 3):
+            data = fetch_marine_data_openmeteo()
+            if data:
+                break
+            print(f"[Open-Meteo] 第 {attempt} 次重試失敗，再試一次...")
     return data
 
 

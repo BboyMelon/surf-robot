@@ -1,0 +1,25 @@
+name: Daily Broadcast Trigger
+
+on:
+  schedule:
+    - cron: '0 21 * * *'  # 台灣時間 05:00 (UTC+8 = UTC 21:00 前一天)
+  workflow_dispatch:        # 允許手動觸發測試
+
+jobs:
+  trigger-broadcast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake up Render & trigger broadcast
+        run: |
+          echo "🌊 觸發每日浪況廣播..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            https://surf-robot.onrender.com/broadcast-now \
+            -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" \
+            --max-time 90)
+          echo "HTTP Status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ 廣播觸發成功"
+          else
+            echo "❌ 廣播觸發失敗 (status: $STATUS)"
+            exit 1
+          fi

@@ -10,8 +10,9 @@ import threading
 import time
 import schedule
 import requests
+from datetime import datetime
 from flask import Flask, request, abort
-from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, STREAMLIT_URL, get_surf_level
+from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, STREAMLIT_URL, BROADCAST_TOKEN, get_surf_level
 from db import add_member, add_group, save_profile, get_profile, update_display_name
 from broadcast import (
     fetch_marine_data, get_marine_data, swell_energy, is_offshore,
@@ -363,6 +364,18 @@ def reply_message(reply_token: str, text: str) -> None:
 @app.route("/health", methods=["GET"])
 def health():
     return "OK", 200
+
+
+# ── 外部廣播觸發端點（GitHub Actions 05:00 呼叫）────────────
+@app.route("/broadcast-now", methods=["POST"])
+def trigger_broadcast():
+    """由 GitHub Actions 在台灣時間 05:00 呼叫，確保廣播不漏發。"""
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {BROADCAST_TOKEN}":
+        abort(403)
+    threading.Thread(target=broadcast, daemon=True).start()
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔔 外部廣播觸發成功")
+    return "Broadcast triggered", 200
 
 # ── Webhook 主路由 ────────────────────────────────────────────
 @app.route("/webhook", methods=["POST"])
