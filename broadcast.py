@@ -11,7 +11,7 @@ import sys
 import requests
 import schedule
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 from config import LINE_CHANNEL_ACCESS_TOKEN, SURF_SPOTS_CONFIG, get_surf_level
 from db import get_all_members, get_all_groups, get_all_profiles, get_profile
@@ -214,6 +214,70 @@ def fetch_marine_data_openmeteo() -> dict:
     return result
 
 
+# ── 步驟 A3：Open-Meteo Marine 明日預報（hourly）───────────
+def fetch_tomorrow_forecast() -> dict:
+    """
+    取得明日浪況預報，使用 Open-Meteo Marine hourly API。
+    取明日 06:00-18:00 的平均波高/週期/方向。
+    回傳格式：{station_id: {wave_height, wave_period, wave_dir}}
+    """
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    station_ids = list(STATION_COORDS.keys())
+    lats = ",".join(str(STATION_COORDS[s][0]) for s in station_ids)
+    lons = ",".join(str(STATION_COORDS[s][1]) for s in station_ids)
+
+    result = {}
+    try:
+        resp = requests.get(
+            "https://marine-api.open-meteo.com/v1/marine",
+            params={
+                "latitude":   lats,
+                "longitude":  lons,
+                "hourly":     "wave_height,wave_period,wave_direction",
+                "timezone":   "Asia/Taipei",
+                "start_date": tomorrow,
+                "end_date":   tomorrow,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        raw       = resp.json()
+        data_list = raw if isinstance(raw, list) else [raw]
+
+        for i, sid in enumerate(station_ids):
+            if i >= len(data_list):
+                break
+            hourly     = data_list[i].get("hourly", {})
+            times      = hourly.get("time", [])
+            heights    = hourly.get("wave_height", [])
+            periods    = hourly.get("wave_period", [])
+            directions = hourly.get("wave_direction", [])
+
+            h_vals, p_vals, d_vals = [], [], []
+            for j, t in enumerate(times):
+                hour = int(t[11:13])
+                if 6 <= hour <= 18:
+                    if j < len(heights)    and heights[j]    is not None:
+                        h_vals.append(float(heights[j]))
+                    if j < len(periods)    and periods[j]    is not None:
+                        p_vals.append(float(periods[j]))
+                    if j < len(directions) and directions[j] is not None:
+                        d_vals.append(float(directions[j]))
+
+            if h_vals:
+                result[sid] = {
+                    "wave_height": round(sum(h_vals) / len(h_vals), 1),
+                    "wave_period": round(sum(p_vals) / len(p_vals), 1) if p_vals else 0.0,
+                    "wave_dir":    degrees_to_compass(sum(d_vals) / len(d_vals)) if d_vals else "—",
+                }
+
+        print(f"[明日預報] 成功取得 {len(result)} 個站點資料")
+    except Exception as e:
+        print(f"[明日預報 API 錯誤] {e}")
+
+    return result
+
+
 # ── 資料取得入口（CWA 優先，失敗改用 Open-Meteo）────────────
 def get_marine_data() -> dict:
     """優先用 CWA 浮標資料；Render 環境被封鎖時自動切換 Open-Meteo。"""
@@ -285,7 +349,7 @@ def personal_rating(wave_h: float, period: float, profile: dict) -> str:
 
 
 # ── 組裝每日浪況簡報 ──────────────────────────────────────
-def build_report(marine: dict) -> str:
+def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     source = marine.get("_meta", {}).get("source", "cwa")
     lines = [f"🌊 每日浪況早報\n📅 {today}\n"]
@@ -329,6 +393,86 @@ def build_report(marine: dict) -> str:
         lines.append("📡 中央氣象署 O-B0075-001")
     lines.append("🗺️ goocean.namr.gov.tw")
 
+    # 附加明日概況
+    if tomorrow_forecast:
+        tomorrow_block = build_tomorrow_section(tomorrow_forecast)
+        if tomorrow_block:
+            lines.append(tomorrow_block)
+
+    return "\n".join(lines)
+
+
+# ── 明日預報：廣播用概覽（每區一行）────────────────────────
+def build_tomorrow_section(forecast: dict) -> str:
+    """生成廣播底部的明日概況區塊（每區取第一個有資料的代表站）。"""
+    if not forecast:
+        return ""
+
+    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%m/%d")
+    seen_cats: dict = {}
+    for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
+        cat = spot_cfg.get("category", "")
+        if cat in seen_cats:
+            continue
+        sid = SPOT_STATION_MAP.get(spot_name)
+        if sid and sid in forecast:
+            seen_cats[cat] = forecast[sid]
+
+    if not seen_cats:
+        return ""
+
+    lines = [f"\n🌅 明日概況（{tomorrow_date} 白天均值）"]
+    for cat, d in seen_cats.items():
+        wh = d.get("wave_height", 0.0)
+        wp = d.get("wave_period", 0.0)
+        wd = d.get("wave_dir", "—")
+        level    = get_surf_level(wh, wp)
+        level_zh = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
+        lines.append(f"{cat}：{wh:.1f}m·{wp:.0f}s·{wd}  {level['emoji']}{level_zh}")
+
+    lines.append("（📡 Open-Meteo 預報模型）")
+    return "\n".join(lines)
+
+
+# ── 明日預報：完整版（查詢指令用）──────────────────────────
+def build_tomorrow_full_report(forecast: dict) -> str:
+    """明日浪況完整預報，格式與即時查詢相同。"""
+    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    lines = [
+        f"🌅 明日浪況預報",
+        f"📅 {tomorrow_date}（06:00–18:00 均值）",
+        "",
+    ]
+
+    current_cat = ""
+    for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
+        cat = spot_cfg.get("category", "")
+        if cat != current_cat:
+            current_cat = cat
+            lines.append(f"\n── {cat} ──")
+
+        sid = SPOT_STATION_MAP.get(spot_name)
+        d   = forecast.get(sid, {}) if sid else {}
+
+        if not d:
+            lines.append(f"┌ 📍 {spot_name}")
+            lines.append(f"└ ⚠️ 暫無預報資料")
+            continue
+
+        wh = d.get("wave_height", 0.0)
+        wp = d.get("wave_period", 0.0)
+        wd = d.get("wave_dir", "—")
+        level      = get_surf_level(wh, wp)
+        energy     = swell_energy(wh, wp)
+        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
+        swell_warn = " ⚠️長浪！" if (wp > 8 and wh > 1.5) else ""
+
+        lines.append(f"┌ 📍 {spot_name}{swell_warn}  {level['emoji']} {level_zh}  ⚡{energy}")
+        lines.append(f"└ 🌊{wh:.1f}m·{wp:.0f}s·{wd}")
+
+    lines.append("")
+    lines.append("📡 Open-Meteo Marine 7天預報模型")
+    lines.append("（實際浪況仍以當日即時資料為準）")
     return "\n".join(lines)
 
 
@@ -429,8 +573,11 @@ def broadcast():
         print("  ⚠️ 無法取得浮標資料（CWA + Open-Meteo 均失敗），廣播取消")
         return
 
+    # 取明日預報（失敗不中斷廣播）
+    tomorrow_forecast = fetch_tomorrow_forecast()
+
     # 通用簡報（給群組 / 無 profile 的人）
-    generic_report = build_report(marine)
+    generic_report = build_report(marine, tomorrow_forecast)
 
     print("── 通用簡報預覽 ──────────────")
     print(generic_report)

@@ -3,7 +3,7 @@
 ## 專案資訊
 - **專案名稱**：LINE 浪況自動訂閱與回報機器人
 - **專案路徑**：`/Users/melon/Downloads/surf_robot/`
-- **最後更新**：2026-05-22
+- **最後更新**：2026-05-25
 - **部署網址**：https://surf-robot.onrender.com
 - **GitHub**：https://github.com/BboyMelon/surf-robot
 
@@ -185,7 +185,7 @@ id, line_id (UNIQUE), display_name, gender, surf_years, board_type, fav_spots, u
 
 ### 🟡 下一步
 - [ ] **今日最佳浪點推薦**：廣播加入能量最高 + 陸風條件的推薦浪點
-- [ ] **明日預報**：Open-Meteo 7天預報，塞進廣播或用查詢觸發（不額外消耗推播額度）
+- [x] **明日預報**：Open-Meteo hourly，廣播底部附概覽 + 「明日」指令查完整版 ✅
 
 ### 🟢 低優先
 - [ ] 全台浪點總覽指令（打「總覽」）

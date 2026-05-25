@@ -17,6 +17,7 @@ from broadcast import (
     fetch_marine_data, get_marine_data, swell_energy, is_offshore,
     SPOT_STATION_MAP, personal_rating,
     broadcast, check_swell_alerts, check_typhoon_alerts,
+    fetch_tomorrow_forecast, build_tomorrow_full_report,
 )
 
 app = Flask(__name__)
@@ -440,6 +441,14 @@ def webhook():
                     reply_message(reply_token, build_profile_confirm(p))
                 else:
                     reply_message(reply_token, build_no_profile_prompt())
+
+            # 明日預報查詢
+            elif any(k in msg_text for k in ["明日預報", "明天浪況", "明日浪況", "明天預報", "明日"]):
+                forecast = fetch_tomorrow_forecast()
+                if forecast:
+                    reply_message(reply_token, build_tomorrow_full_report(forecast))
+                else:
+                    reply_message(reply_token, "⚠️ 目前無法取得明日預報資料，請稍後再試。")
 
             # 其餘訊息：先嘗試浪點查詢，否則引導未建檔用戶填資料
             else:
