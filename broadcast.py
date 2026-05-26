@@ -11,7 +11,9 @@ import sys
 import requests
 import schedule
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
 from config import LINE_CHANNEL_ACCESS_TOKEN, SURF_SPOTS_CONFIG, get_surf_level
 from db import get_all_members, get_all_groups, get_all_profiles, get_profile
@@ -221,7 +223,7 @@ def fetch_tomorrow_forecast() -> dict:
     取明日 06:00-18:00 的平均波高/週期/方向。
     回傳格式：{station_id: {wave_height, wave_period, wave_dir}}
     """
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    tomorrow = (datetime.now(TW_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
     station_ids = list(STATION_COORDS.keys())
     lats = ",".join(str(STATION_COORDS[s][0]) for s in station_ids)
     lons = ",".join(str(STATION_COORDS[s][1]) for s in station_ids)
@@ -354,9 +356,11 @@ def personal_rating(wave_h: float, period: float, profile: dict) -> str:
 
 # ── 組裝每日浪況簡報 ──────────────────────────────────────
 def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
-    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now_tw = datetime.now(TW_TZ)
+    today  = now_tw.strftime("%Y-%m-%d %H:%M")
+    session = "下午快報" if 12 <= now_tw.hour < 20 else "早報"
     source = marine.get("_meta", {}).get("source", "cwa")
-    lines = [f"🌊 每日浪況早報\n📅 {today}\n"]
+    lines = [f"🌊 每日浪況{session}\n📅 {today}\n"]
 
     current_category = ""
     for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
@@ -412,7 +416,7 @@ def build_tomorrow_section(forecast: dict) -> str:
     if not forecast:
         return ""
 
-    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%m/%d")
+    tomorrow_date = (datetime.now(TW_TZ) + timedelta(days=1)).strftime("%m/%d")
     seen_cats: dict = {}
     for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
         cat = spot_cfg.get("category", "")
@@ -441,7 +445,7 @@ def build_tomorrow_section(forecast: dict) -> str:
 # ── 明日預報：完整版（查詢指令用）──────────────────────────
 def build_tomorrow_full_report(forecast: dict) -> str:
     """明日浪況完整預報，格式與即時查詢相同。"""
-    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    tomorrow_date = (datetime.now(TW_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
     lines = [
         f"🌅 明日浪況預報",
         f"📅 {tomorrow_date}（06:00–18:00 均值）",
@@ -499,7 +503,9 @@ def push_line_message(to: str, text: str) -> bool:
 # ── 主廣播任務 ────────────────────────────────────────────
 def build_personal_report(marine: dict, profile: dict) -> str:
     """為有 Profile 的使用者產生個人化簡報（只顯示常衝浪點）。"""
-    today    = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now_tw   = datetime.now(TW_TZ)
+    today    = now_tw.strftime("%Y-%m-%d %H:%M")
+    session  = "下午快報" if 12 <= now_tw.hour < 20 else "早報"
     years    = profile.get("surf_years", 0)
     board    = profile.get("board_type", "")
     fav_raw  = profile.get("fav_spots", "") or ""
@@ -522,7 +528,7 @@ def build_personal_report(marine: dict, profile: dict) -> str:
     target_spots = matched_spots if matched_spots else list(SURF_SPOTS_CONFIG.keys())
 
     lines = [
-        f"🌊 專屬浪況早報｜{skill_tag}",
+        f"🌊 專屬浪況{session}｜{skill_tag}",
         f"📅 {today}",
         f"🛹 板型：{board or '未設定'} | 浪齡：{years} 年",
         "",
@@ -570,7 +576,7 @@ def build_personal_report(marine: dict, profile: dict) -> str:
 
 
 def broadcast():
-    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🌊 開始廣播...")
+    print(f"\n[{datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')} TW] 🌊 開始廣播...")
 
     marine = get_marine_data()
     if not marine:

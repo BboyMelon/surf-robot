@@ -484,10 +484,12 @@ def webhook():
 
 # ── 背景排程執行緒（Render 上唯一跑排程的地方）──────────────
 def _run_scheduler():
-    schedule.every().day.at("05:00").do(broadcast)
+    # Render 伺服器跑 UTC；台灣 05:00 = UTC 21:00，台灣 15:00 = UTC 07:00
+    schedule.every().day.at("21:00").do(broadcast)
+    schedule.every().day.at("07:00").do(broadcast)
     schedule.every(3).hours.do(check_swell_alerts)
     schedule.every(1).hours.do(check_typhoon_alerts)
-    print("🕐 排程啟動：每日 05:00 廣播 / 每 3h 長浪警戒 / 每 1h 颱風警報")
+    print("🕐 排程啟動：台灣 05:00(UTC 21:00) + 15:00(UTC 07:00) 廣播 / 每 3h 長浪警戒 / 每 1h 颱風警報")
     while True:
         schedule.run_pending()
         time.sleep(60)
