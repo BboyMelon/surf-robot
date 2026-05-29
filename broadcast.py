@@ -8,6 +8,7 @@
   - crontab：  0 6 * * * python /path/to/broadcast.py --now
 """
 import sys
+import math
 import requests
 import schedule
 import time
@@ -755,6 +756,21 @@ CWA_TYPHOON_URL = (
     f"?Authorization={CWA_API_KEY}&format=JSON"
 )
 
+TAIWAN_LAT = 23.5   # 台灣中心座標
+TAIWAN_LON = 121.0
+TYPHOON_ALERT_KM = 1000  # 距離門檻（公里）
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """計算兩點球面距離（Haversine 公式，單位 km）。"""
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return round(R * 2 * math.asin(math.sqrt(a)), 0)
+
 
 def push_alert_to_all(msg: str):
     """推播警戒訊息給所有個人訂閱者 + 群組。"""
@@ -866,20 +882,30 @@ def check_typhoon_alerts():
             return
 
         for ty in cyclones:
-            # 用年份 + CWA 編號組成唯一 ID（CwaTyNo 有值代表已達颱風等級）
-            year    = ty.get("Year", "")
-            ty_no   = ty.get("CwaTyNo") or ty.get("CwaTdNo", "")
-            ty_id   = f"{year}-{ty_no}"
-            ty_name     = ty.get("CwaTyphoonName", "未知")   # 中文名，如「薔蜜」
-            ty_name_eng = ty.get("TyphoonName", "")          # 英文名，如「JANGMI」
-
-            # 判斷等級：有 CwaTyNo 為颱風，否則為熱帶性低氣壓
-            if ty.get("CwaTyNo"):
-                warn_level = "颱風"
-            else:
-                warn_level = "熱帶性低氣壓"
+            year        = ty.get("Year", "")
+            ty_no       = ty.get("CwaTyNo") or ty.get("CwaTdNo", "")
+            ty_id       = f"{year}-{ty_no}"
+            ty_name     = ty.get("CwaTyphoonName", "未知")
+            ty_name_eng = ty.get("TyphoonName", "")
+            warn_level  = "颱風" if ty.get("CwaTyNo") else "熱帶性低氣壓"
 
             if not ty_id or ty_id in _alerted_typhoon_ids:
+                continue
+
+            # 取最新實況座標（AnalysisData.Fix 最後一筆）
+            fixes = ty.get("AnalysisData", {}).get("Fix") or []
+            if isinstance(fixes, dict):
+                fixes = [fixes]
+            latest = fixes[-1] if fixes else {}
+            try:
+                ty_lat = float(latest.get("CoordinateLatitude", 0))
+                ty_lon = float(latest.get("CoordinateLongitude", 0))
+                dist_km = haversine_km(TAIWAN_LAT, TAIWAN_LON, ty_lat, ty_lon)
+            except (ValueError, TypeError):
+                dist_km = 9999
+
+            if dist_km > TYPHOON_ALERT_KM:
+                print(f"  ℹ️ {ty_name}（{ty_id}）距台灣 {dist_km:.0f} km，超過 {TYPHOON_ALERT_KM} km 門檻，略過")
                 continue
 
             _alerted_typhoon_ids.add(ty_id)
@@ -892,6 +918,8 @@ def check_typhoon_alerts():
                 "",
                 f"🌀 名稱：{ty_name}（{ty_name_eng}）",
                 f"🔴 類型：{warn_level}",
+                f"📍 目前位置：{ty_lat:.1f}°N  {ty_lon:.1f}°E",
+                f"📏 距台灣：約 {dist_km:.0f} km",
                 "",
                 "🏄 請密切注意氣象局最新公告",
                 "📻 海況可能在未來數日快速惡化",
@@ -899,7 +927,7 @@ def check_typhoon_alerts():
                 "──────────────────",
                 "📡 資料：中央氣象署 W-C0034-005",
             ]
-            print(f"  🌀 偵測到{warn_level}：{ty_name}（{ty_id}）")
+            print(f"  🌀 偵測到{warn_level}：{ty_name}（{ty_id}）距台灣 {dist_km:.0f} km → 推播")
             push_alert_to_all("\n".join(lines))
 
     except Exception as e:
