@@ -96,29 +96,32 @@ def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str
         wind_spd = data.get("wind_speed", 0.0)
 
         if wave_h == 0.0 and period == 0.0:
-            lines.append(f"📍 {spot_name}   ⚠️ 暫無觀測資料")
+            lines.append(f"📍 {spot_name}")
+            lines.append("⚠️ 暫無觀測資料")
             lines.append("")
             continue
 
         offshore   = is_offshore(wind_dir, cfg.get("offshore_wind", []))
         level      = get_surf_level(wave_h, period)
         swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
-        light      = surf_stars(wave_h, period, offshore)
+        stars      = surf_stars(wave_h, period, offshore)
         bft        = ms_to_beaufort(wind_spd)
         summary    = spot_summary_line(wave_h, period, level)
 
-        lines.append(
-            f"📍 {spot_name}{swell_warn}   浪高：{wave_h:.1f}  週期：{period:.0f}"
-            f"  風向：{wind_dir}  風力平均：{bft}級  浪況推薦：{light}  {summary}"
-        )
+        lines.append(f"📍 {spot_name}{swell_warn}")
+        lines.append(f"浪高：{wave_h:.1f}   週期：{period:.0f}   風向：{wind_dir}")
+        lines.append(f"風力平均：{bft}級")
+        lines.append(f"浪況推薦：{stars} {level['emoji']}")
+        lines.append(summary)
+
+        safety = cfg.get("safety_note", "")
+        if safety:
+            lines.append(f"⚠️ {safety}")
 
         if profile:
             rating = personal_rating(wave_h, period, profile)
             lines.append(f"💬 {rating}")
 
-        safety = cfg.get("safety_note", "")
-        if safety:
-            lines.append(f"⚠️ {safety}")
         lines.append("")
 
     source = marine.get("_meta", {}).get("source", "cwa")
