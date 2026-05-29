@@ -109,9 +109,9 @@ def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str
         summary    = spot_summary_line(wave_h, period, level)
 
         lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"浪高：{wave_h:.1f}   週期：{period:.0f}   風向：{wind_dir}")
-        lines.append(f"風力平均：{bft}級")
-        lines.append(f"浪況推薦：{stars} {level['emoji']}")
+        lines.append(f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}")
+        lines.append(f"💨 風力平均：{bft}級  風向：{wind_dir}")
+        lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
         lines.append(summary)
 
         safety = cfg.get("safety_note", "")

@@ -337,10 +337,10 @@ def surf_stars(wave_h: float, period: float, offshore: bool) -> str:
 
 
 def spot_summary_line(wave_h: float, period: float, level: dict) -> str:
-    """推薦浪人描述行（等級名稱 + 一行評語，不含 emoji）。"""
+    """推薦浪人描述行（等級名稱 + 一行評語）。"""
     emoji = level["emoji"]
     if emoji == "⛔":
-        return "推薦浪人：危險封閉，請勿入水"
+        return "👤 推薦浪人：危險封閉，請勿入水"
     if emoji == "🟢":
         desc = "浪況平穩，適合初學者練習" if wave_h >= 0.3 else "浪非常小，練習划水的好機會"
         zh = "初學"
@@ -350,7 +350,7 @@ def spot_summary_line(wave_h: float, period: float, level: dict) -> str:
     else:
         desc = "長浪爆發！衝浪黃金期" if (wave_h >= 1.5 and period >= 8) else "浪大刺激，建議有豐富經驗者"
         zh = "進階"
-    return f"推薦浪人：{zh}，{desc}"
+    return f"👤 推薦浪人：{zh}，{desc}"
 
 
 # ── 個人化評分 ────────────────────────────────────────────
@@ -443,9 +443,9 @@ def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
         bft     = ms_to_beaufort(wind_spd)
         summary = spot_summary_line(wave_h, period, level)
         lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"浪高：{wave_h:.1f}   週期：{period:.0f}   風向：{wind_dir}")
-        lines.append(f"風力平均：{bft}級")
-        lines.append(f"浪況推薦：{stars} {level['emoji']}")
+        lines.append(f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}")
+        lines.append(f"💨 風力平均：{bft}級  風向：{wind_dir}")
+        lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
         lines.append(summary)
         lines.append(f"⚠️ {spot_cfg['safety_note']}")
 
@@ -531,8 +531,8 @@ def build_tomorrow_full_report(forecast: dict) -> str:
         summary    = spot_summary_line(wh, wp, level)
 
         lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"浪高：{wh:.1f}   週期：{wp:.0f}   風向：{wd}")
-        lines.append(f"浪況推薦：{stars} {level['emoji']}")
+        lines.append(f"🌊 浪高：{wh:.1f}   週期：{wp:.0f}   風向：{wd}")
+        lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
         lines.append(summary)
 
     lines.append("")
@@ -625,9 +625,9 @@ def build_personal_report(marine: dict, profile: dict) -> str:
         bft     = ms_to_beaufort(wind_spd)
         summary = spot_summary_line(wave_h, period, level)
         lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"浪高：{wave_h:.1f}   週期：{period:.0f}   風向：{wind_dir}")
-        lines.append(f"風力平均：{bft}級")
-        lines.append(f"浪況推薦：{stars} {level['emoji']}")
+        lines.append(f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}")
+        lines.append(f"💨 風力平均：{bft}級  風向：{wind_dir}")
+        lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
         lines.append(summary)
         lines.append(f"⚠️ {spot_cfg['safety_note']}")
         lines.append(f"💬 {p_rating}")
