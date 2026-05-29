@@ -19,6 +19,7 @@ from broadcast import (
     SPOT_STATION_MAP, personal_rating,
     broadcast, check_swell_alerts, check_typhoon_alerts,
     fetch_tomorrow_forecast, build_tomorrow_full_report,
+    surf_stars, ms_to_beaufort, spot_summary_line,
 )
 
 app = Flask(__name__)
@@ -95,28 +96,29 @@ def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str
         wind_spd = data.get("wind_speed", 0.0)
 
         if wave_h == 0.0 and period == 0.0:
-            lines.append(f"┌ 📍 {spot_name}")
-            lines.append(f"└ ⚠️ 暫無觀測資料")
+            lines.append(f"📍 {spot_name}   ⚠️ 暫無觀測資料")
             lines.append("")
             continue
 
         offshore   = is_offshore(wind_dir, cfg.get("offshore_wind", []))
-        wind_tag   = "✅陸風" if offshore else "❌向岸風"
         level      = get_surf_level(wave_h, period)
-        energy     = swell_energy(wave_h, period)
         swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
-        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
+        light      = surf_stars(wave_h, period, offshore)
+        bft        = ms_to_beaufort(wind_spd)
+        summary    = spot_summary_line(wave_h, period, level)
 
-        lines.append(f"┌ 📍 {spot_name}{swell_warn}")
-        lines.append(f"│ 🌊 {wave_h:.1f}m · {period:.1f}s · {wave_dir}  💨{wind_dir} {wind_spd:.1f}m/s")
-        lines.append(f"│ {level['emoji']} 浪人推薦：{level_zh}  {wind_tag}  ⚡{energy}")
+        lines.append(
+            f"📍 {spot_name}{swell_warn}   浪高：{wave_h:.1f}  週期：{period:.0f}"
+            f"  風向：{wind_dir}  風力平均：{bft}級  浪況推薦：{light}  {summary}"
+        )
 
         if profile:
             rating = personal_rating(wave_h, period, profile)
-            lines.append(f"│ 👤 {rating}")
+            lines.append(f"💬 {rating}")
 
         safety = cfg.get("safety_note", "")
-        lines.append(f"└ ⚠️ {safety}" if safety else "└ ─")
+        if safety:
+            lines.append(f"⚠️ {safety}")
         lines.append("")
 
     source = marine.get("_meta", {}).get("source", "cwa")
