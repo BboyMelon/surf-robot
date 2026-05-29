@@ -456,6 +456,7 @@ def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
     else:
         lines.append("📡 中央氣象署 O-B0075-001")
     lines.append("🗺️ goocean.namr.gov.tw")
+    lines.append("💡 輸入 help 查看指令總覽")
 
     # 附加明日概況
     if tomorrow_forecast:
@@ -636,6 +637,7 @@ def build_personal_report(marine: dict, profile: dict) -> str:
     source = marine.get("_meta", {}).get("source", "cwa")
     lines.append("")
     lines.append("📡 " + ("Open-Meteo Marine（備援模式）" if source == "open-meteo" else "中央氣象署 O-B0075-001"))
+    lines.append("💡 輸入 help 查看指令總覽")
     return "\n".join(lines)
 
 

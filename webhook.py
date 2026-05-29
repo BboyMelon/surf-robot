@@ -187,6 +187,29 @@ def skill_label(surf_years: int) -> str:
     else:
         return "🔥 進階衝浪者"
 
+# ── 指令總覽 ──────────────────────────────────────────────────
+HELP_TEXT = """📖 指令總覽
+
+🌊 【即時浪況查詢】
+直接輸入區域或浪點名稱：
+  北部 / 中部 / 東部 / 南部
+  花蓮 / 台東 / 恆春 / 墾丁
+  烏石港、外澳、翡翠灣、南灣…
+
+📅 【預報查詢】
+  明日 / 明天浪況 / 明日預報
+
+👤 【個人資料】
+  我的資料 → 查看 Surfer 檔案
+  我的ID   → 查看 LINE ID
+
+⏰ 【自動推播】
+  每日 05:00 自動推送浪況早報
+  長浪警戒（波高 ≥1.5m 且週期 ≥8s）
+  颱風通知（距台灣 1000km 內）
+
+💡 輸入浪點名稱即可即時查詢！"""
+
 # ── 圖文選單：即時浪況查詢 ───────────────────────────────────
 SPOT_QUERY_HINT = """🔍 即時浪況查詢
 
@@ -459,6 +482,10 @@ def webhook():
                     reply_message(reply_token, build_profile_confirm(p))
                 else:
                     reply_message(reply_token, build_no_profile_prompt())
+
+            # 指令總覽
+            elif any(k in msg_text for k in ["help", "Help", "HELP", "指令", "說明", "功能"]):
+                reply_message(reply_token, HELP_TEXT)
 
             # 明日預報查詢
             elif any(k in msg_text for k in ["明日預報", "明天浪況", "明日浪況", "明天預報", "明日"]):
