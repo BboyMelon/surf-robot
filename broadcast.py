@@ -305,6 +305,46 @@ def is_offshore(wind_dir_en: str, offshore_list: List[str]) -> bool:
     zh = WIND_DIR_MAP.get(wind_dir_en.upper(), "")
     return any(o in zh for o in offshore_list)
 
+
+def ms_to_beaufort(ms: float) -> int:
+    """m/s 轉蒲福風級。"""
+    thresholds = [0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7]
+    for scale, t in enumerate(thresholds):
+        if ms < t:
+            return scale
+    return 12
+
+
+def surf_stars(wave_h: float, period: float, offshore: bool) -> str:
+    """浪況交通燈：🟢好浪 / 🟡中等 / 🔴大浪危險"""
+    level = get_surf_level(wave_h, period)
+    emoji = level["emoji"]
+    if emoji == "⛔" or wave_h > 2.5:
+        return "🔴"
+    if emoji == "🟡" and offshore:   # 中階浪 + 陸風 = 最佳
+        return "🟢"
+    if emoji == "🔴" and offshore:   # 進階浪 + 陸風 = 好浪
+        return "🟢"
+    return "🟡"                      # 浪小 / 向岸風 = 中等
+
+
+def spot_summary_line(wave_h: float, period: float, level: dict) -> str:
+    """推薦浪人：等級名稱 + 一行評語。"""
+    emoji = level["emoji"]
+    if emoji == "⛔":
+        return "⛔ 推薦浪人：危險封閉，請勿入水"
+    if emoji == "🟢":
+        desc = "浪況平穩，適合初學者練習" if wave_h >= 0.3 else "浪非常小，練習划水的好機會"
+        zh = "初學"
+    elif emoji == "🟡":
+        desc = "浪小，可以練習動作技巧" if wave_h < 0.8 else "浪況適中，盡情享受！"
+        zh = "中階"
+    else:
+        desc = "長浪爆發！衝浪黃金期" if (wave_h >= 1.5 and period >= 8) else "浪大刺激，建議有豐富經驗者"
+        zh = "進階"
+    return f"{emoji} 推薦浪人：{zh}，{desc}"
+
+
 # ── 個人化評分 ────────────────────────────────────────────
 def personal_rating(wave_h: float, period: float, profile: dict) -> str:
     """
@@ -387,12 +427,17 @@ def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
         level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
 
         if wave_h == 0.0 and period == 0.0:
-            lines.append(f"┌ 📍 {spot_name}")
-            lines.append(f"└ ⚠️ 暫無觀測資料")
+            lines.append(f"📍 {spot_name}   ⚠️ 暫無觀測資料")
             continue
 
-        lines.append(f"┌ 📍 {spot_name}{swell_warn}  {level['emoji']} 浪人推薦：{level_zh}  {wind_tag}")
-        lines.append(f"└ 🌊{wave_h:.1f}m·{period:.0f}s·{wave_dir}  💨{wind_dir} {wind_spd:.1f}m/s  ⚡{energy}")
+        stars   = surf_stars(wave_h, period, offshore)
+        bft     = ms_to_beaufort(wind_spd)
+        summary = spot_summary_line(wave_h, period, level)
+        lines.append(
+            f"📍 {spot_name}{swell_warn}   浪高：{wave_h:.1f}  週期：{period:.0f}"
+            f"  風向：{wind_dir}  風力平均：{bft}級  浪況推薦：{stars}  {summary}"
+        )
+        lines.append(f"⚠️ {spot_cfg['safety_note']}")
 
     lines.append("")
     if source == "open-meteo":
@@ -463,20 +508,21 @@ def build_tomorrow_full_report(forecast: dict) -> str:
         d   = forecast.get(sid, {}) if sid else {}
 
         if not d:
-            lines.append(f"┌ 📍 {spot_name}")
-            lines.append(f"└ ⚠️ 暫無預報資料")
+            lines.append(f"📍 {spot_name}   ⚠️ 暫無預報資料")
             continue
 
         wh = d.get("wave_height", 0.0)
         wp = d.get("wave_period", 0.0)
         wd = d.get("wave_dir", "—")
         level      = get_surf_level(wh, wp)
-        energy     = swell_energy(wh, wp)
-        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
         swell_warn = " ⚠️長浪！" if (wp > 8 and wh > 1.5) else ""
+        stars      = surf_stars(wh, wp, False)  # 預報無風向資料，陸風不計入
+        summary    = spot_summary_line(wh, wp, level)
 
-        lines.append(f"┌ 📍 {spot_name}{swell_warn}  {level['emoji']} {level_zh}  ⚡{energy}")
-        lines.append(f"└ 🌊{wh:.1f}m·{wp:.0f}s·{wd}")
+        lines.append(
+            f"📍 {spot_name}{swell_warn}   浪高：{wh:.1f}  週期：{wp:.0f}  風向：{wd}"
+            f"  浪況推薦：{stars}  {summary}"
+        )
 
     lines.append("")
     lines.append("📡 Open-Meteo Marine 7天預報模型")
@@ -560,14 +606,18 @@ def build_personal_report(marine: dict, profile: dict) -> str:
         p_rating   = personal_rating(wave_h, period, profile)
 
         if wave_h == 0.0 and period == 0.0:
-            lines.append(f"┌ 📍 {spot_name}")
-            lines.append(f"└ ⚠️ 暫無觀測資料")
+            lines.append(f"📍 {spot_name}   ⚠️ 暫無觀測資料")
             continue
 
-        lines.append(f"┌ 📍 {spot_name}{swell_warn}  {level['emoji']} 浪人推薦：{level_zh}  {wind_tag}")
-        lines.append(f"│ 🌊{wave_h:.1f}m·{period:.0f}s·{wave_dir}  💨{wind_dir} {wind_spd:.1f}m/s  ⚡{energy}")
-        lines.append(f"│ 👤 {p_rating}")
-        lines.append(f"└ ⚠️ {spot_cfg['safety_note']}")
+        stars   = surf_stars(wave_h, period, offshore)
+        bft     = ms_to_beaufort(wind_spd)
+        summary = spot_summary_line(wave_h, period, level)
+        lines.append(
+            f"📍 {spot_name}{swell_warn}   浪高：{wave_h:.1f}  週期：{period:.0f}"
+            f"  風向：{wind_dir}  風力平均：{bft}級  浪況推薦：{stars}  {summary}"
+        )
+        lines.append(f"💬 {p_rating}")
+        lines.append(f"⚠️ {spot_cfg['safety_note']}")
 
     source = marine.get("_meta", {}).get("source", "cwa")
     lines.append("")
@@ -780,7 +830,7 @@ def check_swell_alerts():
 def check_typhoon_alerts():
     """
     每 1 小時自動執行。呼叫 CWA W-C0034-005，
-    出現新颱風警報（ID 未推播過）時立即通知所有訂閱者。
+    出現新熱帶氣旋（ID 未推播過）時立即通知所有訂閱者。
     Render 海外 IP 可能被封鎖，例外一律靜默忽略。
     """
     now = datetime.now()
@@ -791,21 +841,30 @@ def check_typhoon_alerts():
         resp.raise_for_status()
         data = resp.json()
 
-        typhoons = (
-            data.get("records", {}).get("Typhoon") or
-            data.get("Records", {}).get("Typhoon") or
-            []
-        )
+        # 實際 API 結構：records.TropicalCyclones.TropicalCyclone（陣列）
+        records = data.get("records") or data.get("Records") or {}
+        cyclones = records.get("TropicalCyclones", {}).get("TropicalCyclone") or []
+        # 單筆時 API 可能回傳 dict 而非 list
+        if isinstance(cyclones, dict):
+            cyclones = [cyclones]
 
-        if not typhoons:
-            print("  ✅ 目前無颱風警報")
+        if not cyclones:
+            print("  ✅ 目前無活動熱帶氣旋")
             return
 
-        for ty in typhoons:
-            ty_id       = ty.get("CWA_TyphoonID", "")
-            ty_name     = ty.get("TyphoonName", "未知")
-            ty_name_eng = ty.get("TyphoonNameEng", "")
-            warn_level  = ty.get("WarningLevel", "颱風警報")
+        for ty in cyclones:
+            # 用年份 + CWA 編號組成唯一 ID（CwaTyNo 有值代表已達颱風等級）
+            year    = ty.get("Year", "")
+            ty_no   = ty.get("CwaTyNo") or ty.get("CwaTdNo", "")
+            ty_id   = f"{year}-{ty_no}"
+            ty_name     = ty.get("CwaTyphoonName", "未知")   # 中文名，如「薔蜜」
+            ty_name_eng = ty.get("TyphoonName", "")          # 英文名，如「JANGMI」
+
+            # 判斷等級：有 CwaTyNo 為颱風，否則為熱帶性低氣壓
+            if ty.get("CwaTyNo"):
+                warn_level = "颱風"
+            else:
+                warn_level = "熱帶性低氣壓"
 
             if not ty_id or ty_id in _alerted_typhoon_ids:
                 continue
@@ -813,21 +872,21 @@ def check_typhoon_alerts():
             _alerted_typhoon_ids.add(ty_id)
 
             lines = [
-                "🌀 颱風警報通知 🌀",
+                "🌀 熱帶氣旋通知 🌀",
                 f"📅 {now.strftime('%Y-%m-%d %H:%M')}",
                 "",
-                "⚠️ 中央氣象署已發布颱風警報！",
+                f"⚠️ 中央氣象署偵測到活動中的{warn_level}！",
                 "",
-                f"🌀 颱風名稱：{ty_name}（{ty_name_eng}）",
-                f"🔴 警報層級：{warn_level}",
+                f"🌀 名稱：{ty_name}（{ty_name_eng}）",
+                f"🔴 類型：{warn_level}",
                 "",
-                "🏄 衝浪活動建議暫停，海況危險！",
-                "📻 請持續收聽最新氣象預報",
-                "🏥 注意人身安全，遠離海邊",
+                "🏄 請密切注意氣象局最新公告",
+                "📻 海況可能在未來數日快速惡化",
+                "🏥 衝浪前務必確認最新警報狀態",
                 "──────────────────",
                 "📡 資料：中央氣象署 W-C0034-005",
             ]
-            print(f"  🌀 偵測到颱風警報：{ty_name}（{ty_id}）")
+            print(f"  🌀 偵測到{warn_level}：{ty_name}（{ty_id}）")
             push_alert_to_all("\n".join(lines))
 
     except Exception as e:
