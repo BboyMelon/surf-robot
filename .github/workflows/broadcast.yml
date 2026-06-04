@@ -10,17 +10,34 @@ jobs:
   trigger-broadcast:
     runs-on: ubuntu-latest
     steps:
-      - name: Wake up Render & trigger broadcast
+      - name: Wake up Render (wait until healthy)
+        run: |
+          echo "⏳ 等待 Render 服務喚醒..."
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              https://surf-robot.onrender.com/health --max-time 15)
+            echo "  /health 嘗試 $i/12：HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ 服務已就緒"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Trigger broadcast
         run: |
           echo "🌊 觸發浪況廣播..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            https://surf-robot.onrender.com/broadcast-now \
-            -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" \
-            --max-time 90)
-          echo "HTTP Status: $STATUS"
-          if [ "$STATUS" = "200" ]; then
-            echo "✅ 廣播觸發成功"
-          else
-            echo "❌ 廣播觸發失敗 (status: $STATUS)"
-            exit 1
-          fi
+          for i in 1 2 3; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              https://surf-robot.onrender.com/broadcast-now \
+              -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" \
+              --max-time 30)
+            echo "  嘗試 $i/3：HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ 廣播觸發成功"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "❌ 廣播觸發失敗（3次都不是200）"
+          exit 1

@@ -37,13 +37,14 @@ def init_sqlite():
     """)
     c.execute("""
         CREATE TABLE IF NOT EXISTS profiles (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            line_id    TEXT UNIQUE,
-            gender     TEXT,
-            surf_years INTEGER DEFAULT 0,
-            board_type TEXT,
-            fav_spots  TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            line_id      TEXT UNIQUE,
+            gender       TEXT,
+            surf_years   INTEGER DEFAULT 0,
+            board_type   TEXT,
+            fav_spots    TEXT,
+            display_name TEXT,
+            updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()

@@ -428,12 +428,9 @@ def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
         wind_dir = data.get("wind_dir") or "—"
         wind_spd = data.get("wind_speed", 0.0)
 
-        energy     = swell_energy(wave_h, period)
         level      = get_surf_level(wave_h, period)
         offshore   = is_offshore(wind_dir, spot_cfg["offshore_wind"])
-        wind_tag   = "✅陸風" if offshore else "❌向岸"
         swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
-        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
 
         if wave_h == 0.0 and period == 0.0:
             lines.append(f"📍 {spot_name}")
@@ -611,11 +608,8 @@ def build_personal_report(marine: dict, profile: dict) -> str:
         wind_spd = data.get("wind_speed", 0.0)
 
         offshore   = is_offshore(wind_dir, spot_cfg["offshore_wind"])
-        wind_tag   = "✅陸風" if offshore else "❌向岸"
         swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
         level      = get_surf_level(wave_h, period)
-        level_zh   = level["label"].split()[1] if len(level["label"].split()) > 1 else level["label"]
-        energy     = swell_energy(wave_h, period)
         p_rating   = personal_rating(wave_h, period, profile)
 
         if wave_h == 0.0 and period == 0.0:
