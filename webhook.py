@@ -12,8 +12,8 @@ import schedule
 import requests
 from datetime import datetime
 from flask import Flask, request, abort
-from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, STREAMLIT_URL, BROADCAST_TOKEN, get_surf_level
-from db import add_member, add_group, save_profile, get_profile, update_display_name
+from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, get_surf_level
+from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name
 from broadcast import (
     fetch_marine_data, get_marine_data, swell_energy, is_offshore,
     SPOT_STATION_MAP, personal_rating,
@@ -429,12 +429,24 @@ def webhook():
             push_message(user_id, build_welcome(is_group=False))
             print(f"[Follow] {user_id}")
 
+        # ── 封鎖 / 取消加好友 ─────────────────────────────────
+        elif event_type == "unfollow" and source_type == "user":
+            user_id = source.get("userId")
+            remove_member(user_id)
+            print(f"[Unfollow] {user_id}")
+
         # ── 機器人加入群組 ────────────────────────────────────
         elif event_type == "join" and source_type == "group":
             group_id = source.get("groupId")
             add_group(group_id)
             push_message(group_id, build_welcome(is_group=True))
             print(f"[Join] {group_id}")
+
+        # ── 機器人被踢出群組 ──────────────────────────────────
+        elif event_type == "leave" and source_type == "group":
+            group_id = source.get("groupId")
+            remove_group(group_id)
+            print(f"[Leave] {group_id}")
 
         # ── 文字訊息處理 ──────────────────────────────────────
         elif event_type == "message" and event.get("message", {}).get("type") == "text":

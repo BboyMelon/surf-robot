@@ -73,6 +73,18 @@ def add_member(email: str, line_id: str) -> Tuple[bool, str]:
     except Exception as e:
         return False, str(e)
 
+def remove_member(line_id: str) -> None:
+    try:
+        if USE_SUPABASE:
+            _sb.table("members").update({"status": "inactive"}).eq("line_id", line_id).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute("UPDATE members SET status='inactive' WHERE line_id=?", (line_id,))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"[remove_member 失敗] {e}")
+
 def get_all_members() -> List[dict]:
     if USE_SUPABASE:
         res = _sb.table("members").select("*").eq("status", "active").execute()
@@ -102,6 +114,18 @@ def add_group(group_id: str) -> Tuple[bool, str]:
         return True, "群組已加入！"
     except Exception as e:
         return False, str(e)
+
+def remove_group(group_id: str) -> None:
+    try:
+        if USE_SUPABASE:
+            _sb.table("groups").update({"status": "inactive"}).eq("group_id", group_id).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute("UPDATE groups SET status='inactive' WHERE group_id=?", (group_id,))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"[remove_group 失敗] {e}")
 
 def get_all_groups() -> List[dict]:
     if USE_SUPABASE:
