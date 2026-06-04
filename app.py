@@ -68,7 +68,7 @@ with st.sidebar:
 
 # ── 主頁面：左右分欄 ──────────────────────────────────────
 st.title("🌊 浪況訂閱機器人")
-st.markdown("訂閱後每日清晨 05:00 收到台灣三大浪點浪況早報！")
+st.markdown("訂閱後每日清晨 05:00 收到台灣 15 大浪點浪況早報！")
 st.divider()
 
 col_left, col_right = st.columns([1, 1.6])
@@ -99,14 +99,16 @@ with col_left:
                 st.error(f"❌ 寫入失敗：{msg}")
 
     st.divider()
-    st.subheader("📡 三大監測浪點")
-    spots = {
-        "🌊 宜蘭外澳":    "陸風：西／西南／南",
-        "🌊 金山沙珠灣":  "陸風：南／西南",
-        "🌊 恆春佳樂水":  "陸風：西／西北",
-    }
-    for name, wind in spots.items():
-        st.markdown(f"**{name}**  \n`{wind}`")
+    st.subheader("📡 15 大監測浪點")
+    from collections import defaultdict
+    cats = defaultdict(list)
+    for spot_name, cfg in SURF_SPOTS_CONFIG.items():
+        cats[cfg["category"]].append((spot_name, cfg))
+    for cat, spot_list in cats.items():
+        st.markdown(f"**{cat}**")
+        for spot_name, cfg in spot_list:
+            winds = "／".join(cfg["offshore_wind"])
+            st.markdown(f"　🌊 {spot_name}　`陸風：{winds}`")
 
     st.divider()
     st.caption("資料來源：中央氣象署 + GoOcean 國家海洋研究院")
