@@ -453,10 +453,12 @@ def webhook():
             msg_text = event["message"]["text"]
             user_id  = source.get("userId", "")
 
-            # 每次互動自動更新 LINE 顯示名稱
+            # 只在 DB 尚無名稱時才呼叫 LINE API（減少呼叫次數）
             if user_id:
-                display_name = get_line_display_name(user_id)
-                update_display_name(user_id, display_name)
+                existing = get_profile(user_id)
+                if not existing or not existing.get("display_name"):
+                    display_name = get_line_display_name(user_id)
+                    update_display_name(user_id, display_name)
 
             # ── 圖文選單觸發 ──────────────────────────────────
             if "🔍 即時浪況查詢" in msg_text:
@@ -522,6 +524,11 @@ def webhook():
                     if not p:
                         name = get_line_display_name(user_id)
                         reply_message(reply_token, build_no_profile_prompt(name))
+                    else:
+                        reply_message(reply_token,
+                            "找不到對應的浪點或指令 🤔\n"
+                            "輸入 help 查看支援的地區與浪點名稱 👇"
+                        )
 
     return "OK", 200
 

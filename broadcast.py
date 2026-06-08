@@ -413,10 +413,13 @@ def find_best_spots(marine: dict, top_n: int = 3) -> list:
     依湧浪能量 + 陸風加成，找出今日最佳浪點。
     跳過無資料及危險封閉浪點，不額外消耗 API 呼叫。
     """
+    seen_stations: set = set()  # 同浮標站只取第一個浪點，避免重複上榜
     scored = []
     for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
         sid  = SPOT_STATION_MAP.get(spot_name)
-        data = marine.get(sid, {}) if sid else {}
+        if not sid or sid in seen_stations:
+            continue
+        data = marine.get(sid, {})
         wave_h   = data.get("wave_height", 0.0)
         period   = data.get("wave_period", 0.0)
         wind_dir = data.get("wind_dir") or "—"
@@ -426,8 +429,9 @@ def find_best_spots(marine: dict, top_n: int = 3) -> list:
 
         level = get_surf_level(wave_h, period)
         if level["emoji"] == "⛔":
-            continue  # 危險封閉浪點不推薦
+            continue
 
+        seen_stations.add(sid)
         offshore = is_offshore(wind_dir, spot_cfg["offshore_wind"])
         energy   = swell_energy(wave_h, period)
         score    = energy * (1.3 if offshore else 1.0)  # 陸風加成 30%
