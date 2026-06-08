@@ -124,12 +124,16 @@ def fetch_marine_data() -> dict:
                 except (TypeError, ValueError):
                     return default
 
+            def safe_str(val) -> str:
+                # CWA API 有時回傳字串 "None" 而非 Python None
+                return "—" if not val or str(val).strip() in ("None", "null", "") else str(val)
+
             result[sid] = {
                 "wave_height": safe_float(we.get("WaveHeight")),
                 "wave_period": safe_float(we.get("WavePeriod")),
-                "wave_dir":    we.get("WaveDirectionDescription") or "—",
+                "wave_dir":    safe_str(we.get("WaveDirectionDescription")),
                 "wind_speed":  safe_float(anemo.get("WindSpeed")),
-                "wind_dir":    anemo.get("WindDirectionDescription") or "—",
+                "wind_dir":    safe_str(anemo.get("WindDirectionDescription")),
                 "tide_height": safe_float(we.get("TideHeight")),
                 "tide_level":  we.get("TideLevel", ""),
                 "sea_temp":    safe_float(we.get("SeaTemperature")),
