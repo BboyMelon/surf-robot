@@ -20,6 +20,7 @@ from broadcast import (
     broadcast, check_swell_alerts, check_typhoon_alerts,
     fetch_tomorrow_forecast, build_tomorrow_full_report,
     surf_stars, ms_to_beaufort, spot_summary_line,
+    build_overview_report,
 )
 
 app = Flask(__name__)
@@ -190,6 +191,9 @@ def skill_label(surf_years: int) -> str:
 # ── 指令總覽 ──────────────────────────────────────────────────
 HELP_TEXT = """📖 指令總覽
 
+🗺️ 【全台總覽】
+  總覽 → 每區一行精簡摘要
+
 🌊 【即時浪況查詢】
 直接輸入區域或浪點名稱：
   北部 / 中部 / 東部 / 南部
@@ -199,12 +203,17 @@ HELP_TEXT = """📖 指令總覽
 📅 【預報查詢】
   明日 / 明天浪況 / 明日預報
 
+🏆 【每日廣播】
+  每日 05:00 自動推播，含：
+  · 今日最佳浪點推薦 🥇🥈🥉
+  · 15 大浪點完整報告
+  · 明日浪況概況
+
 👤 【個人資料】
   我的資料 → 查看 Surfer 檔案
   我的ID   → 查看 LINE ID
 
-⏰ 【自動推播】
-  每日 05:00 自動推送浪況早報
+⏰ 【自動警戒】
   長浪警戒（波高 ≥1.5m 且週期 ≥8s）
   颱風通知（距台灣 1000km 內）
 
@@ -500,6 +509,14 @@ def webhook():
             # 指令總覽
             elif any(k in msg_text for k in ["help", "Help", "HELP", "指令", "說明", "功能"]):
                 reply_message(reply_token, HELP_TEXT)
+
+            # 全台總覽
+            elif any(k in msg_text for k in ["總覽", "全台", "overview"]):
+                marine = get_marine_data()
+                if marine:
+                    reply_message(reply_token, build_overview_report(marine))
+                else:
+                    reply_message(reply_token, "⚠️ 目前無法取得浪況資料，請稍後再試。")
 
             # 明日預報查詢
             elif any(k in msg_text for k in ["明日預報", "明天浪況", "明日浪況", "明天預報", "明日"]):

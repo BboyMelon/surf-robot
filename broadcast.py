@@ -470,6 +470,43 @@ def build_best_spot_section(marine: dict) -> str:
     return "\n".join(lines)
 
 
+# ── 全台總覽（每區一行精簡摘要）────────────────────────────
+def build_overview_report(marine: dict) -> str:
+    """
+    打「總覽」回傳：每個地區各一行，顯示代表浮標的浪況摘要。
+    每個 category 取第一個有資料的浪點作代表。
+    """
+    now_str = datetime.now(TW_TZ).strftime("%m/%d %H:%M")
+    lines   = [f"🗺️ 全台浪況總覽｜{now_str}", ""]
+
+    seen_cats: dict = {}
+    for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
+        cat = spot_cfg.get("category", "")
+        if cat in seen_cats:
+            continue
+        sid  = SPOT_STATION_MAP.get(spot_name)
+        data = marine.get(sid, {}) if sid else {}
+        wave_h = data.get("wave_height", 0.0)
+        period = data.get("wave_period", 0.0)
+        if wave_h == 0.0 and period == 0.0:
+            continue
+        wind_dir = data.get("wind_dir") or "—"
+        offshore = is_offshore(wind_dir, spot_cfg["offshore_wind"])
+        level    = get_surf_level(wave_h, period)
+        stars    = surf_stars(wave_h, period, offshore)
+        of_tag   = " 🌬️" if offshore else ""
+        seen_cats[cat] = True
+        lines.append(f"{cat}  {wave_h:.1f}m · {period:.0f}s{of_tag}  {stars} {level['emoji']}")
+
+    source = marine.get("_meta", {}).get("source", "cwa")
+    lines += [
+        "",
+        "📡 " + ("Open-Meteo Marine（備援）" if source == "open-meteo" else "中央氣象署 O-B0075-001"),
+        "💡 輸入地區名稱查詳細浪況（例：北部、花蓮）",
+    ]
+    return "\n".join(lines)
+
+
 # ── 組裝每日浪況簡報 ──────────────────────────────────────
 def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
     now_tw = datetime.now(TW_TZ)
