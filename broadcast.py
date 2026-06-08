@@ -403,6 +403,65 @@ def personal_rating(wave_h: float, period: float, profile: dict) -> str:
     return rating + board_warn
 
 
+# ── 今日最佳浪點 ─────────────────────────────────────────
+def find_best_spots(marine: dict, top_n: int = 3) -> list:
+    """
+    依湧浪能量 + 陸風加成，找出今日最佳浪點。
+    跳過無資料及危險封閉浪點，不額外消耗 API 呼叫。
+    """
+    scored = []
+    for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
+        sid  = SPOT_STATION_MAP.get(spot_name)
+        data = marine.get(sid, {}) if sid else {}
+        wave_h   = data.get("wave_height", 0.0)
+        period   = data.get("wave_period", 0.0)
+        wind_dir = data.get("wind_dir") or "—"
+
+        if wave_h == 0.0 and period == 0.0:
+            continue
+
+        level = get_surf_level(wave_h, period)
+        if level["emoji"] == "⛔":
+            continue  # 危險封閉浪點不推薦
+
+        offshore = is_offshore(wind_dir, spot_cfg["offshore_wind"])
+        energy   = swell_energy(wave_h, period)
+        score    = energy * (1.3 if offshore else 1.0)  # 陸風加成 30%
+
+        scored.append({
+            "name":     spot_name,
+            "wave_h":   wave_h,
+            "period":   period,
+            "wind_dir": wind_dir,
+            "stars":    surf_stars(wave_h, period, offshore),
+            "level":    level,
+            "score":    score,
+            "offshore": offshore,
+        })
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    return scored[:top_n]
+
+
+def build_best_spot_section(marine: dict) -> str:
+    """生成「今日最佳浪點」推薦區塊，嵌入廣播開頭。"""
+    best = find_best_spots(marine)
+    if not best:
+        return ""
+
+    medals = ["🥇", "🥈", "🥉"]
+    lines  = ["🏆 今日最佳浪點推薦"]
+    for i, b in enumerate(best):
+        medal   = medals[i] if i < 3 else "  "
+        of_tag  = "｜🌬️ 陸風" if b["offshore"] else ""
+        lines.append(
+            f"{medal} {b['name']}  {b['stars']} {b['level']['emoji']}\n"
+            f"   🌊 {b['wave_h']:.1f}m｜週期 {b['period']:.0f}s{of_tag}"
+        )
+    lines.append("──────────────────")
+    return "\n".join(lines)
+
+
 # ── 組裝每日浪況簡報 ──────────────────────────────────────
 def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
     now_tw = datetime.now(TW_TZ)
@@ -410,6 +469,11 @@ def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
     session = "下午快報" if 12 <= now_tw.hour < 20 else "早報"
     source = marine.get("_meta", {}).get("source", "cwa")
     lines = [f"🌊 每日浪況{session}\n📅 {today}\n"]
+
+    best_section = build_best_spot_section(marine)
+    if best_section:
+        lines.append(best_section)
+        lines.append("")
 
     current_category = ""
     for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
@@ -589,6 +653,11 @@ def build_personal_report(marine: dict, profile: dict) -> str:
         f"🛹 板型：{board or '未設定'} | 浪齡：{years} 年",
         "",
     ]
+
+    best_section = build_best_spot_section(marine)
+    if best_section:
+        lines.append(best_section)
+        lines.append("")
 
     current_cat = ""
     for spot_name in target_spots:
