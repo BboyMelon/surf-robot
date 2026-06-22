@@ -186,6 +186,7 @@ id, line_id (UNIQUE), display_name, gender, surf_years, board_type, fav_spots, u
 ### 🟡 下一步
 - [ ] **今日最佳浪點推薦**：廣播加入能量最高 + 陸風條件的推薦浪點
 - [x] **明日預報**：Open-Meteo hourly，廣播底部附概覽 + 「明日」指令查完整版 ✅
+- [ ] **重複邏輯整併**：`build_report()` / `build_personal_report()`（broadcast.py）跟 `build_instant_report()`（webhook.py）三處幾乎一樣的單浪點格式化邏輯重複，未來加欄位要記得改 3 處。可抽成共用 helper，例如 `build_spot_lines(spot_name, data, cfg, profile=None, show_tide=False)`
 
 ### 🟢 低優先
 - [ ] 訂閱開關（用戶自助暫停/恢復）
@@ -196,6 +197,7 @@ id, line_id (UNIQUE), display_name, gender, surf_years, board_type, fav_spots, u
 - [x] Supabase 訂閱資料同步到 Google Sheet ✅（2026-06-22 完成。新增 `sync_to_sheets.py` + `.github/workflows/sync_sheets.yml`，每日台灣時間 04:30 自動把 members/groups/profiles 同步進 Google Sheet 對應分頁，獨立跑在 GitHub Actions runner、不經過 Render；GitHub Secrets 已設定 `GOOGLE_SERVICE_ACCOUNT_JSON`/`GOOGLE_SHEET_ID`/`SUPABASE_URL`/`SUPABASE_KEY`，已用真實憑證端到端測試成功）
 - [x] 訂閱邀請卡片 + Windy 歸類進專業海象觀測網 ✅（2026-06-22 完成。新增「訂閱」文字指令彈出 Flex 卡片，引導使用者前往 Streamlit 表單；Windy 動態地圖連結同時併入「📚 專業海象觀測網」卡片第4顆按鈕。需在 Render 環境變數設定 `STREAMLIT_URL`，已完成）
 - [x] LINE 圖文選單改版 ✅（2026-06-22 完成。`setup_richmenu.py` 修復 Apple 彩色 emoji 在 PIL 顯示空白方塊的問題（需加 `embedded_color=True`）；改成「陽光海洋衝浪」風格漸層配色 + 底部波浪剪影 + 文字黑色描邊；第4格從 Windy 改成「📋 加入浪況訂閱會員」。已實際上線，新選單 ID `richmenu-7b21ba38ac7c9fca44f8383e9817efb8`）
+- [x] 程式碼優化 3 項 ✅（2026-06-22 完成。`CWA_API_KEY` 改從環境變數讀取，不再寫死在 `broadcast.py` 裡（Render 環境變數已確認設定）；`check_swell_alerts()`/`check_typhoon_alerts()` 補上 `TW_TZ`，修正警戒推播顯示時間在 Render 上跟台灣差 8 小時的問題；`remind_incomplete_profiles()` 改用 `is None` 判斷浪齡欄位，浪齡填 0 的新手不會再被誤判成資料未填完整。⚠️ 備註：舊的 CWA 金鑰字串仍留在 git 歷史紀錄裡，CWA 金鑰風險低但有空可考慮去 CWA 會員中心重新申請一組金鑰輪替）
 
 ### 💡 未來功能（暫緩）
 - [ ] **影片連結投稿**：浪友傳 `📹 烏石港 https://...`，機器人存 surf_videos 表，廣播附「今日影片」

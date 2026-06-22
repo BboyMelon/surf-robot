@@ -7,3 +7,4 @@ surf_bot.db
 *.jpg
 api權限.txt
 *.json
+.DS_Store
