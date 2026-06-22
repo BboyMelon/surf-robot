@@ -137,6 +137,7 @@ surf_robot/
 - **部署**：Render + Streamlit Cloud 雙部署、GitHub Actions 4 個 workflow 全自動化
 - **圖文選單**：LINE Rich Menu 4 按鈕，2026-06-22 改版為海洋衝浪風格
 - **2026-06-22 程式碼優化**：`CWA_API_KEY` 改走環境變數、警戒推播時區修正（`TW_TZ`）、浪齡 0 誤判修正
+- **2026-06-22 CWA SSL 修復**：Render 上 CWA API 連線失敗問題（見上方待辦清單說明），改用 `curl` 子行程解決；潮汐時刻顯示排版優化（兩欄分行，原本一行擠 4 個時刻不好讀）
 
 ---
 
@@ -150,7 +151,8 @@ surf_robot/
 - [ ] 訂閱開關（用戶自助暫停/恢復）
 - [ ] 警戒 de-dup 持久化（目前存在記憶體，Render 重啟後重置，可考慮存 Supabase `alerts_log` 表）
 - [x] LINE_CHANNEL_SECRET 金鑰輪替 ✅（2026-06-22 完成，LINE Console 重新產生 + Render/本機 .env 同步更新，傳訊息測試正常）
-- [ ] CWA_API_KEY 金鑰輪替（風險低，不急；舊值曾明文出現在 git 歷史中）
+- [x] CWA_API_KEY 金鑰輪替 ✅（2026-06-22 完成）
+- [x] **CWA API 在 Render 上 SSL 連線失敗** ✅（2026-06-22 修復。根因：CWA 證書鏈缺少 Subject Key Identifier 欄位，本機 OpenSSL 不檢查、Render 的 OpenSSL 3.2+ 嚴格模式會直接拒絕，跟金鑰本身無關。試過 `verify=False`、自訂 SSLContext 清嚴格旗標都沒用，最後改用 `subprocess` 呼叫系統 `curl -sk` 取代 `requests` 才解決。詳細踩坑記錄在 line-bot-builder skill 第17條）
 
 ### 未來功能（暫緩）
 - [ ] 影片連結投稿：浪友傳 `📹 烏石港 https://...`，存 `surf_videos` 表，廣播附「今日影片」
