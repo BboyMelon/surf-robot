@@ -351,13 +351,15 @@ def build_tide_line(tide: dict) -> str:
         return ""
 
     now_hm = datetime.now(TW_TZ).strftime("%H:%M")
-    parts  = [f"{ev['type']} {ev['time']}" for ev in events]
-    line   = f"🌙 潮汐（{tide['tide_range']}潮）：" + "　".join(parts)
+    lines  = [f"🌙 潮汐（{tide['tide_range']}潮）"]
+    for i in range(0, len(events), 2):
+        pair = events[i:i + 2]
+        lines.append("｜".join(f"{ev['type']} {ev['time']}" for ev in pair))
 
     next_ev = next((ev for ev in events if ev["time"] > now_hm), None)
     if next_ev:
-        line += f"\n⏰ 下次{next_ev['type']} {next_ev['time']}"
-    return line
+        lines.append(f"⏰ 下次{next_ev['type']} {next_ev['time']}")
+    return "\n".join(lines)
 
 
 # ── 資料取得入口（CWA 優先，失敗改用 Open-Meteo，最多 retry 2 次）──
