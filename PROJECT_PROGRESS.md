@@ -192,7 +192,9 @@ id, line_id (UNIQUE), display_name, gender, surf_years, board_type, fav_spots, u
 - [x] Surfer 檔案新增「名稱」欄位 + 防重複建檔 ✅（2026-06-22 完成。`db.py` profiles 表新增 `nickname` 欄位，`save_profile()` 改為只更新有傳入的欄位（修復先前每次填表會把 `display_name` 清空的 bug）；已建檔的 LINE ID 若沒有在訊息加上「修改」二字，重送表單會被擋下並提示，避免誤觸覆寫。**部署前需先到 Supabase SQL Editor 執行 `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS nickname text;`**）
 - [x] 潮汐時間 ✅（CWA F-A0021-001，2026-06-22 完成。`config.py` 新增 `TIDE_STATION_MAP` 15浪點對應潮汐站；`broadcast.py` 新增 `fetch_tide_today()` / `build_tide_line()`；單一浪點即時查詢會附上今日滿潮/乾潮時刻表 + 下次潮汐倒數）
 - [x] Render 設定自動部署 ✅（GitHub Actions push main 自動觸發 Deploy Hook，已於 2026-06-12 確認運作中）
-- [x] Streamlit 後台部署 ✅（2026-06-12 部署到 Streamlit Community Cloud，手機可直接開網址查看 Surfer 檔案/訂閱名單，App 分享設定為 Public，管理員密碼 `surf123`）
+- [x] Streamlit 後台部署 ✅（2026-06-12 部署到 Streamlit Community Cloud，手機可直接開網址查看 Surfer 檔案/訂閱名單，App 分享設定為 Public，管理員密碼 `surf123`；網址 `https://surf-robot-svyi2lsrzaeuxxgxrzxsys.streamlit.app/`）
+- [x] Supabase 訂閱資料同步到 Google Sheet ✅（2026-06-22 完成。新增 `sync_to_sheets.py` + `.github/workflows/sync_sheets.yml`，每日台灣時間 04:30 自動把 members/groups/profiles 同步進 Google Sheet 對應分頁，獨立跑在 GitHub Actions runner、不經過 Render；GitHub Secrets 已設定 `GOOGLE_SERVICE_ACCOUNT_JSON`/`GOOGLE_SHEET_ID`/`SUPABASE_URL`/`SUPABASE_KEY`，已用真實憑證端到端測試成功）
+- [x] 訂閱邀請卡片 + Windy 歸類進專業海象觀測網 ✅（2026-06-22 完成。新增「訂閱」文字指令彈出 Flex 卡片，引導使用者前往 Streamlit 表單；Windy 動態地圖連結同時併入「📚 專業海象觀測網」卡片第4顆按鈕；LINE 圖文選單圖片本身維持不變，原有 Windy 格子先保留，之後要放什麼功能再決定。需在 Render 環境變數設定 `STREAMLIT_URL`，已完成）
 
 ### 💡 未來功能（暫緩）
 - [ ] **影片連結投稿**：浪友傳 `📹 烏石港 https://...`，機器人存 surf_videos 表，廣播附「今日影片」

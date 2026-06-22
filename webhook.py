@@ -12,7 +12,7 @@ import schedule
 import requests
 from datetime import datetime
 from flask import Flask, request, abort
-from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, get_surf_level
+from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL, get_surf_level
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name
 from broadcast import (
     fetch_marine_data, get_marine_data, swell_energy, is_offshore,
@@ -144,6 +144,8 @@ def build_welcome(is_group: bool = False) -> str:
 ⏰ 【每日定時報浪時間】
 每日 05:00 自動推播最即時、結合 Swell Eye 湧浪能量與 GoOcean 安全評級的精準浪況簡報！
 
+📋 輸入「訂閱」前往官方訂閱表單，解鎖完整功能＋瀏覽衝浪相關電子報資訊！
+
 👇 【自助功能選單】
 手機下方已為您準備快捷圖文選單，動動手指即可解鎖更多衝浪黑科技！
 
@@ -202,6 +204,9 @@ def skill_label(surf_years: int) -> str:
 
 # ── 指令總覽 ──────────────────────────────────────────────────
 HELP_TEXT = """📖 指令總覽
+
+📋 【訂閱】
+  訂閱 → 前往官方訂閱表單，解鎖每日推播
 
 🗺️ 【全台總覽】
   總覽 → 每區一行精簡摘要
@@ -315,6 +320,62 @@ def build_ocean_links_flex() -> dict:
                             "type": "uri",
                             "label": "🏄 Swell Eye 衝浪科學",
                             "uri": "https://www.surf-forecast.com/",
+                        },
+                    },
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#3D1A70",
+                        "action": {
+                            "type": "uri",
+                            "label": "🗺️ Windy 動態地圖",
+                            "uri": "https://www.windy.com/?waves,23.8,121.8,6",
+                        },
+                    },
+                ],
+            },
+        },
+    }
+
+# ── 圖文選單：訂閱表單邀請 Flex Message ─────────────────────
+def build_subscribe_flex() -> dict:
+    return {
+        "type": "flex",
+        "altText": "📋 立即訂閱浪況推播",
+        "contents": {
+            "type": "bubble",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#0A6B5E",
+                "contents": [{
+                    "type": "text",
+                    "text": "📋 立即訂閱浪況推播",
+                    "color": "#ffffff",
+                    "weight": "bold",
+                    "size": "lg",
+                }],
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "完成訂閱後，才能啟用每日 05:00 自動推播浪況功能，並可在訂閱頁瀏覽衝浪相關電子報與資訊 🌊",
+                        "wrap": True,
+                        "size": "sm",
+                        "color": "#444444",
+                    },
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#0A6B5E",
+                        "action": {
+                            "type": "uri",
+                            "label": "🌊 前往訂閱表單",
+                            "uri": STREAMLIT_URL,
                         },
                     },
                 ],
@@ -502,6 +563,10 @@ def webhook():
             elif "🗺️ Windy 動態地圖" in msg_text:
                 reply_message(reply_token,
                     "🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\nhttps://www.windy.com/?waves,23.8,121.8,6")
+
+            # 訂閱表單邀請
+            elif any(k in msg_text for k in ["訂閱", "立即訂閱", "加入訂閱", "訂閱表單"]):
+                reply_flex(reply_token, build_subscribe_flex())
 
             # 查詢自己名稱
             elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):
