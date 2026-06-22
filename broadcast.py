@@ -598,6 +598,7 @@ def build_spot_block(spot_name: str, cfg: dict, data: dict,
         return [f"📍 {spot_name}", "⚠️ 暫無觀測資料"]
 
     offshore   = is_offshore(wind_dir, cfg.get("offshore_wind", []))
+    wind_dir_zh = WIND_DIR_MAP.get(wind_dir.upper(), wind_dir)
     level      = get_surf_level(wave_h, period)
     swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
     stars      = surf_stars(wave_h, period, offshore)
@@ -607,7 +608,7 @@ def build_spot_block(spot_name: str, cfg: dict, data: dict,
     lines = [
         f"📍 {spot_name}{swell_warn}",
         f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}",
-        f"💨 風力平均：{bft}級  風向：{wind_dir}",
+        f"💨 風力平均：{bft}級  風向：{wind_dir_zh}",
         f"🏄 浪況推薦：{stars} {level['emoji']}",
         summary,
     ]
@@ -727,13 +728,14 @@ def build_tomorrow_full_report(forecast: dict) -> str:
         wh = d.get("wave_height", 0.0)
         wp = d.get("wave_period", 0.0)
         wd = d.get("wave_dir", "—")
+        wd_zh = WIND_DIR_MAP.get(wd.upper(), wd)
         level      = get_surf_level(wh, wp)
         swell_warn = " ⚠️長浪！" if (wp > 8 and wh > 1.5) else ""
         stars      = surf_stars(wh, wp, False)  # 預報無風向資料，陸風不計入
         summary    = spot_summary_line(wh, wp, level)
 
         lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"🌊 浪高：{wh:.1f}   週期：{wp:.0f}   風向：{wd}")
+        lines.append(f"🌊 浪高：{wh:.1f}   週期：{wp:.0f}   浪向：{wd_zh}")
         lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
         lines.append(summary)
 
