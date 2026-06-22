@@ -14,7 +14,7 @@
 
 ## ⚠️ 安全性提醒
 - 所有金鑰只存在 `.env`（本機，gitignore）、Render Environment、Streamlit Secrets、GitHub Secrets 這四個地方，**不要**寫進任何會 commit 的檔案（包含這份文件）。
-- 本文件舊版曾經把 `CWA_API_KEY`、`LINE_CHANNEL_SECRET` 實際值寫在表格裡並 commit 進 git 歷史，已於 2026-06-22 移除目前版本的明文，但**歷史紀錄中還留著舊值**。CWA 金鑰是免費氣象資料、風險低；`LINE_CHANNEL_SECRET` 風險較高，有空建議到 LINE Developers Console 重新產生並更新 Render/Streamlit/本機三處的環境變數。
+- 本文件舊版曾經把 `CWA_API_KEY`、`LINE_CHANNEL_SECRET` 實際值寫在表格裡並 commit 進 git 歷史，已於 2026-06-22 移除目前版本的明文，但**歷史紀錄中還留著舊值**。repo 是 Private（只有自己能看到），實際風險低，純粹是好習慣。`LINE_CHANNEL_SECRET` 已於 2026-06-22 完成輪替（Render + 本機 .env 已更新，傳 LINE 訊息測試正常）；`CWA_API_KEY` 是免費氣象資料、風險更低，還沒輪替，不急。
 - `.gitignore` 已排除：`.env`、`*.json`（Google service account 金鑰）、`api權限.txt`、`*.png`、`.DS_Store`、`surf_bot.db`。
 
 ---
@@ -149,7 +149,8 @@ surf_robot/
 ### 低優先
 - [ ] 訂閱開關（用戶自助暫停/恢復）
 - [ ] 警戒 de-dup 持久化（目前存在記憶體，Render 重啟後重置，可考慮存 Supabase `alerts_log` 表）
-- [ ] LINE_CHANNEL_SECRET / CWA_API_KEY 金鑰輪替（舊值曾經明文出現在本文件的 git 歷史中）
+- [x] LINE_CHANNEL_SECRET 金鑰輪替 ✅（2026-06-22 完成，LINE Console 重新產生 + Render/本機 .env 同步更新，傳訊息測試正常）
+- [ ] CWA_API_KEY 金鑰輪替（風險低，不急；舊值曾明文出現在 git 歷史中）
 
 ### 未來功能（暫緩）
 - [ ] 影片連結投稿：浪友傳 `📹 烏石港 https://...`，存 `surf_videos` 表，廣播附「今日影片」
