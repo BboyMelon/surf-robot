@@ -16,10 +16,9 @@ from datetime import datetime, timedelta, timezone
 
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
-from config import LINE_CHANNEL_ACCESS_TOKEN, SURF_SPOTS_CONFIG, get_surf_level
+from config import LINE_CHANNEL_ACCESS_TOKEN, SURF_SPOTS_CONFIG, CWA_API_KEY, get_surf_level
 from db import get_all_members, get_all_groups, get_all_profiles, get_profile
 
-CWA_API_KEY = "CWA-548E18F6-09C1-4F44-A924-9E18773BFF4D"
 CWA_MARINE_URL = (
     "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-B0075-001"
     f"?Authorization={CWA_API_KEY}&format=JSON"
@@ -896,7 +895,7 @@ def remind_incomplete_profiles() -> dict:
             incomplete.append(lid)
             continue
         # 任一必填欄位為空 → 視為未完整
-        if not p.get("gender") or not p.get("board_type") or not p.get("surf_years"):
+        if not p.get("gender") or not p.get("board_type") or p.get("surf_years") is None:
             incomplete.append(lid)
 
     ok = fail = 0
@@ -965,7 +964,7 @@ def check_swell_alerts():
     每 3 小時自動執行。波高 >= 1.5m 且週期 >= 8s → 立即推播長浪警戒。
     同一浮標站 6 小時內最多推一次（in-memory de-dup）。
     """
-    now = datetime.now()
+    now = datetime.now(TW_TZ)
     print(f"[{now.strftime('%Y-%m-%d %H:%M')}] 🔍 長浪警戒檢查中...")
 
     marine = get_marine_data()
@@ -1030,7 +1029,7 @@ def check_typhoon_alerts():
     出現新熱帶氣旋（ID 未推播過）時立即通知所有訂閱者。
     Render 海外 IP 可能被封鎖，例外一律靜默忽略。
     """
-    now = datetime.now()
+    now = datetime.now(TW_TZ)
     print(f"[{now.strftime('%Y-%m-%d %H:%M')}] 🌀 颱風警報檢查中...")
 
     try:
