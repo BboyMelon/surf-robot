@@ -145,7 +145,7 @@ surf_robot/
 
 ### 下一步
 - [ ] **今日最佳浪點推薦擴充**：目前已有基本版（`find_best_spots()`），可再優化排序權重
-- [ ] **重複邏輯整併**：`build_report()` / `build_personal_report()`（broadcast.py）跟 `build_instant_report()`（webhook.py）三處幾乎一樣的單浪點格式化邏輯重複，未來加欄位要記得改 3 處。可抽成共用 helper，例如 `build_spot_lines(spot_name, data, cfg, profile=None, show_tide=False)`
+- [x] **重複邏輯整併** ✅（2026-06-22 完成。抽出共用函式 `build_spot_block()`，`build_report()`/`build_personal_report()`/`build_instant_report()` 三處改呼叫同一個函式，淨減少約 44 行；順手移除死變數 `wave_dir` 跟 webhook.py 5 個變多餘的 import）
 
 ### 低優先
 - [ ] 訂閱開關（用戶自助暫停/恢復）
