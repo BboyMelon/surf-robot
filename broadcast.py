@@ -12,12 +12,18 @@ import math
 import requests
 import schedule
 import time
+import urllib3
 from datetime import datetime, timedelta, timezone
 
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
 from config import LINE_CHANNEL_ACCESS_TOKEN, SURF_SPOTS_CONFIG, CWA_API_KEY, get_surf_level
 from db import get_all_members, get_all_groups, get_all_profiles, get_profile
+
+# CWA 開放資料平台的證書鏈缺少 Subject Key Identifier 欄位，在 Render 的 OpenSSL
+# 版本下會被嚴格模式判定為無效（本機 macOS 不會，純粹是兩邊 OpenSSL 嚴格程度不同）。
+# 這裡只對 CWA 的請求關閉驗證；CWA 是公開氣象資料，沒有敏感資料外洩風險。
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 CWA_MARINE_URL = (
     "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-B0075-001"
@@ -100,7 +106,7 @@ def fetch_marine_data() -> dict:
     """
     result = {}
     try:
-        resp = requests.get(CWA_MARINE_URL, timeout=8)
+        resp = requests.get(CWA_MARINE_URL, timeout=8, verify=False)
         resp.raise_for_status()
         d = resp.json()
 
@@ -298,6 +304,7 @@ def fetch_tide_today(location_id: str) -> dict:
             CWA_TIDE_URL,
             params={"Authorization": CWA_API_KEY, "format": "JSON", "LocationId": location_id},
             timeout=8,
+            verify=False,
         )
         resp.raise_for_status()
         forecasts = resp.json()["records"]["TideForecasts"]
@@ -1033,7 +1040,7 @@ def check_typhoon_alerts():
     print(f"[{now.strftime('%Y-%m-%d %H:%M')}] 🌀 颱風警報檢查中...")
 
     try:
-        resp = requests.get(CWA_TYPHOON_URL, timeout=10)
+        resp = requests.get(CWA_TYPHOON_URL, timeout=10, verify=False)
         resp.raise_for_status()
         data = resp.json()
 
