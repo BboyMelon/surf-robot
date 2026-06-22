@@ -12,14 +12,13 @@ import schedule
 import requests
 from datetime import datetime
 from flask import Flask, request, abort
-from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL, get_surf_level
+from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name
 from broadcast import (
-    get_marine_data, is_offshore,
-    SPOT_STATION_MAP, personal_rating,
+    get_marine_data,
+    SPOT_STATION_MAP, build_spot_block,
     broadcast, check_swell_alerts, check_typhoon_alerts,
     fetch_tomorrow_forecast, build_tomorrow_full_report,
-    surf_stars, ms_to_beaufort, spot_summary_line,
     build_overview_report,
     fetch_tide_today, build_tide_line,
 )
@@ -91,45 +90,10 @@ def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str
         station_id = SPOT_STATION_MAP.get(spot_name)
         data       = marine.get(station_id, {}) if station_id else {}
 
-        wave_h   = data.get("wave_height", 0.0)
-        period   = data.get("wave_period", 0.0)
-        wave_dir = data.get("wave_dir", "—")
-        wind_dir = data.get("wind_dir", "—")
-        wind_spd = data.get("wind_speed", 0.0)
+        tide_id   = TIDE_STATION_MAP.get(spot_name)
+        tide_line = build_tide_line(fetch_tide_today(tide_id)) if tide_id else ""
 
-        if wave_h == 0.0 and period == 0.0:
-            lines.append(f"📍 {spot_name}")
-            lines.append("⚠️ 暫無觀測資料")
-            lines.append("")
-            continue
-
-        offshore   = is_offshore(wind_dir, cfg.get("offshore_wind", []))
-        level      = get_surf_level(wave_h, period)
-        swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
-        stars      = surf_stars(wave_h, period, offshore)
-        bft        = ms_to_beaufort(wind_spd)
-        summary    = spot_summary_line(wave_h, period, level)
-
-        lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}")
-        lines.append(f"💨 風力平均：{bft}級  風向：{wind_dir}")
-        lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
-        lines.append(summary)
-
-        safety = cfg.get("safety_note", "")
-        if safety:
-            lines.append(f"⚠️ {safety}")
-
-        tide_id = TIDE_STATION_MAP.get(spot_name)
-        if tide_id:
-            tide_line = build_tide_line(fetch_tide_today(tide_id))
-            if tide_line:
-                lines.append(tide_line)
-
-        if profile:
-            rating = personal_rating(wave_h, period, profile)
-            lines.append(f"💬 {rating}")
-
+        lines.extend(build_spot_block(spot_name, cfg, data, profile=profile, tide_line=tide_line))
         lines.append("")
 
     source = marine.get("_meta", {}).get("source", "cwa")

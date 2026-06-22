@@ -584,6 +584,47 @@ def build_overview_report(marine: dict) -> str:
     return "\n".join(lines)
 
 
+# ── 單一浪點格式化（共用於廣播/個人化/即時查詢三處）──────────
+def build_spot_block(spot_name: str, cfg: dict, data: dict,
+                      profile: dict = None, tide_line: str = "") -> list:
+    """回傳單一浪點的文字行清單。tide_line 由呼叫端自己抓好再傳入，
+    這個函式只負責格式化，不處理潮汐 API 呼叫。"""
+    wave_h   = data.get("wave_height", 0.0)
+    period   = data.get("wave_period", 0.0)
+    wind_dir = data.get("wind_dir") or "—"
+    wind_spd = data.get("wind_speed", 0.0)
+
+    if wave_h == 0.0 and period == 0.0:
+        return [f"📍 {spot_name}", "⚠️ 暫無觀測資料"]
+
+    offshore   = is_offshore(wind_dir, cfg.get("offshore_wind", []))
+    level      = get_surf_level(wave_h, period)
+    swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
+    stars      = surf_stars(wave_h, period, offshore)
+    bft        = ms_to_beaufort(wind_spd)
+    summary    = spot_summary_line(wave_h, period, level)
+
+    lines = [
+        f"📍 {spot_name}{swell_warn}",
+        f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}",
+        f"💨 風力平均：{bft}級  風向：{wind_dir}",
+        f"🏄 浪況推薦：{stars} {level['emoji']}",
+        summary,
+    ]
+
+    safety = cfg.get("safety_note", "")
+    if safety:
+        lines.append(f"⚠️ {safety}")
+
+    if tide_line:
+        lines.append(tide_line)
+
+    if profile:
+        lines.append(f"💬 {personal_rating(wave_h, period, profile)}")
+
+    return lines
+
+
 # ── 組裝每日浪況簡報 ──────────────────────────────────────
 def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
     now_tw = datetime.now(TW_TZ)
@@ -607,31 +648,7 @@ def build_report(marine: dict, tomorrow_forecast: dict = None) -> str:
 
         station_id = SPOT_STATION_MAP.get(spot_name)
         data       = marine.get(station_id, {})
-
-        wave_h   = data.get("wave_height", 0.0)
-        period   = data.get("wave_period", 0.0)
-        wave_dir = data.get("wave_dir") or "—"
-        wind_dir = data.get("wind_dir") or "—"
-        wind_spd = data.get("wind_speed", 0.0)
-
-        level      = get_surf_level(wave_h, period)
-        offshore   = is_offshore(wind_dir, spot_cfg["offshore_wind"])
-        swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
-
-        if wave_h == 0.0 and period == 0.0:
-            lines.append(f"📍 {spot_name}")
-            lines.append("⚠️ 暫無觀測資料")
-            continue
-
-        stars   = surf_stars(wave_h, period, offshore)
-        bft     = ms_to_beaufort(wind_spd)
-        summary = spot_summary_line(wave_h, period, level)
-        lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}")
-        lines.append(f"💨 風力平均：{bft}級  風向：{wind_dir}")
-        lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
-        lines.append(summary)
-        lines.append(f"⚠️ {spot_cfg['safety_note']}")
+        lines.extend(build_spot_block(spot_name, spot_cfg, data))
 
     lines.append("")
     if source == "open-meteo":
@@ -792,32 +809,7 @@ def build_personal_report(marine: dict, profile: dict) -> str:
             current_cat = cat
             lines.append(f"\n── {cat} ──")
 
-        wave_h   = data.get("wave_height", 0.0)
-        period   = data.get("wave_period", 0.0)
-        wave_dir = data.get("wave_dir") or "—"
-        wind_dir = data.get("wind_dir") or "—"
-        wind_spd = data.get("wind_speed", 0.0)
-
-        offshore   = is_offshore(wind_dir, spot_cfg["offshore_wind"])
-        swell_warn = " ⚠️長浪！" if (period > 8 and wave_h > 1.5) else ""
-        level      = get_surf_level(wave_h, period)
-        p_rating   = personal_rating(wave_h, period, profile)
-
-        if wave_h == 0.0 and period == 0.0:
-            lines.append(f"📍 {spot_name}")
-            lines.append("⚠️ 暫無觀測資料")
-            continue
-
-        stars   = surf_stars(wave_h, period, offshore)
-        bft     = ms_to_beaufort(wind_spd)
-        summary = spot_summary_line(wave_h, period, level)
-        lines.append(f"📍 {spot_name}{swell_warn}")
-        lines.append(f"🌊 浪高：{wave_h:.1f}   週期：{period:.0f}")
-        lines.append(f"💨 風力平均：{bft}級  風向：{wind_dir}")
-        lines.append(f"🏄 浪況推薦：{stars} {level['emoji']}")
-        lines.append(summary)
-        lines.append(f"⚠️ {spot_cfg['safety_note']}")
-        lines.append(f"💬 {p_rating}")
+        lines.extend(build_spot_block(spot_name, spot_cfg, data, profile=profile))
 
     source = marine.get("_meta", {}).get("source", "cwa")
     lines.append("")
