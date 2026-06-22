@@ -15,7 +15,7 @@ from flask import Flask, request, abort
 from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL, get_surf_level
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name
 from broadcast import (
-    fetch_marine_data, get_marine_data, swell_energy, is_offshore,
+    get_marine_data, is_offshore,
     SPOT_STATION_MAP, personal_rating,
     broadcast, check_swell_alerts, check_typhoon_alerts,
     fetch_tomorrow_forecast, build_tomorrow_full_report,
