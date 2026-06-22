@@ -39,6 +39,7 @@ def init_sqlite():
         CREATE TABLE IF NOT EXISTS profiles (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             line_id      TEXT UNIQUE,
+            nickname     TEXT,
             gender       TEXT,
             surf_years   INTEGER DEFAULT 0,
             board_type   TEXT,
@@ -47,6 +48,10 @@ def init_sqlite():
             updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    try:
+        c.execute("ALTER TABLE profiles ADD COLUMN nickname TEXT")
+    except sqlite3.OperationalError:
+        pass  # 舊版資料庫已有此欄位
     conn.commit()
     conn.close()
 
@@ -138,28 +143,39 @@ def get_all_groups() -> List[dict]:
     return [dict(r) for r in rows]
 
 # ── 使用者 Profile ────────────────────────────────────────────
+PROFILE_FIELDS = ("nickname", "gender", "surf_years", "board_type", "fav_spots", "display_name")
+
 def save_profile(line_id: str, profile: dict) -> Tuple[bool, str]:
-    """新增或更新使用者衝浪檔案。"""
+    """
+    新增或更新使用者衝浪檔案。
+    line_id 為唯一鍵，同一 LINE 使用者永遠只會對應一筆檔案（upsert）。
+    只會寫入 profile 裡實際有的欄位，不會把沒傳入的欄位覆蓋成空值。
+    """
+    data = {"line_id": line_id}
+    data.update({k: profile[k] for k in PROFILE_FIELDS if k in profile})
+
     try:
-        data = {
-            "line_id":      line_id,
-            "gender":       profile.get("gender", ""),
-            "surf_years":   profile.get("surf_years", 0),
-            "board_type":   profile.get("board_type", ""),
-            "fav_spots":    profile.get("fav_spots", ""),
-            "display_name": profile.get("display_name", ""),
-        }
         if USE_SUPABASE:
             _sb.table("profiles").upsert(data, on_conflict="line_id").execute()
         else:
             conn = sqlite3.connect(SQLITE_PATH)
-            conn.execute(
-                """INSERT OR REPLACE INTO profiles
-                   (line_id, gender, surf_years, board_type, fav_spots, display_name)
-                   VALUES (?,?,?,?,?,?)""",
-                (line_id, data["gender"], data["surf_years"],
-                 data["board_type"], data["fav_spots"], data["display_name"])
-            )
+            exists = conn.execute(
+                "SELECT 1 FROM profiles WHERE line_id=?", (line_id,)
+            ).fetchone()
+            if exists:
+                updates = {k: v for k, v in data.items() if k != "line_id"}
+                set_clause = ", ".join(f"{k}=?" for k in updates)
+                conn.execute(
+                    f"UPDATE profiles SET {set_clause} WHERE line_id=?",
+                    list(updates.values()) + [line_id]
+                )
+            else:
+                cols = ", ".join(data.keys())
+                placeholders = ", ".join("?" for _ in data)
+                conn.execute(
+                    f"INSERT INTO profiles ({cols}) VALUES ({placeholders})",
+                    list(data.values())
+                )
             conn.commit()
             conn.close()
         return True, "Profile 已儲存"

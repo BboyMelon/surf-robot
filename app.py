@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 from db import add_member, get_all_members, get_all_groups, get_all_profiles
 from broadcast import remind_incomplete_profiles
-from config import ADMIN_PASSWORD
+from config import ADMIN_PASSWORD, SURF_SPOTS_CONFIG
 
 st.set_page_config(
     page_title="🌊 浪況訂閱機器人",
@@ -45,7 +45,7 @@ with st.sidebar:
         profiles = get_all_profiles()
         if profiles:
             df_p = pd.DataFrame(profiles)
-            show_cols_p = [c for c in ["display_name", "gender", "surf_years", "board_type", "fav_spots", "updated_at"] if c in df_p.columns]
+            show_cols_p = [c for c in ["nickname", "display_name", "gender", "surf_years", "board_type", "fav_spots", "updated_at"] if c in df_p.columns]
             st.dataframe(df_p[show_cols_p], use_container_width=True)
         else:
             st.info("尚無用戶檔案")

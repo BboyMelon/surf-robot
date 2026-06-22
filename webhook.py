@@ -159,6 +159,7 @@ def build_welcome(is_group: bool = False) -> str:
 def parse_profile(text: str) -> dict:
     """
     偵測並解析格式：
+      名稱：阿翔
       性別：男
       浪齡：3
       衝浪板型：短板
@@ -172,6 +173,7 @@ def parse_profile(text: str) -> dict:
         m = re.search(pattern, t)
         return m.group(1).strip() if m else ""
 
+    nickname   = extract(r"名稱[：:]\s*(.+)", text)
     gender     = extract(r"性別[：:]\s*(.+)", text)
     years_raw  = extract(r"浪齡[：:]\s*(\d+)", text)
     board_type = extract(r"(?:版型|衝浪板型)[：:]\s*(.+)", text)
@@ -179,12 +181,15 @@ def parse_profile(text: str) -> dict:
 
     surf_years = int(years_raw) if years_raw.isdigit() else 0
 
-    return {
+    profile = {
         "gender":     gender,
         "surf_years": surf_years,
         "board_type": board_type,
         "fav_spots":  fav_spots,
     }
+    if nickname:
+        profile["nickname"] = nickname
+    return profile
 
 # ── 根據 profile 判斷技術等級 ──────────────────────────────────
 def skill_label(surf_years: int) -> str:
@@ -220,6 +225,7 @@ HELP_TEXT = """📖 指令總覽
 👤 【個人資料】
   我的資料 → 查看 Surfer 檔案
   我的ID   → 查看 LINE ID
+  已建檔後若要修改，請在表單開頭加上「修改」二字
 
 ⏰ 【自動警戒】
   長浪警戒（波高 ≥1.5m 且週期 ≥8s）
@@ -247,13 +253,15 @@ PROFILE_FORM = """📝 填寫小資料，解鎖客製化浪況建議！
 請複製以下格式，填寫後直接回傳 👇
 
 ━━━━━━━━━━━━
+名稱：（你想被稱呼的名字）
 性別：（男 / 女 / 其他）
 浪齡：（例：3）
 版型：（長板 / 短板 / 中長板）
 常衝浪點：（填入你常去的浪點）
 ━━━━━━━━━━━━
 
-建立後每日 05:00 推送專屬浪況早報 🌊"""
+建立後每日 05:00 推送專屬浪況早報 🌊
+💡 已建立過檔案的話，請在開頭加上「修改」二字再重新填寫，才能更新資料喔！"""
 
 # ── 圖文選單：專業海象觀測網 Flex Message ─────────────────
 def build_ocean_links_flex() -> dict:
@@ -327,6 +335,7 @@ def build_no_profile_prompt(name: str = "") -> str:
 請複製以下格式填寫後回傳 👇
 
 ━━━━━━━━━━━━
+名稱：（你想被稱呼的名字）
 性別：（男 / 女 / 其他）
 浪齡：（例：3）
 版型：（長板 / 短板 / 中長板）
@@ -336,10 +345,13 @@ def build_no_profile_prompt(name: str = "") -> str:
 {spot_menu}"""
 
 # ── 回覆確認訊息 ──────────────────────────────────────────────
-def build_profile_confirm(profile: dict) -> str:
+def build_profile_confirm(profile: dict, is_update: bool = False) -> str:
     label = skill_label(profile.get("surf_years", 0))
-    return f"""✅ 衝浪檔案建立完成！
+    title = "✅ 衝浪檔案已更新！" if is_update else "✅ 衝浪檔案建立完成！"
+    nickname = profile.get("nickname") or profile.get("display_name") or "未填"
+    return f"""{title}
 
+📛 名稱：{nickname}
 👤 性別：{profile.get('gender', '未填')}
 🏄 浪齡：{profile.get('surf_years', 0)} 年
 🛹 板型：{profile.get('board_type', '未填')}
@@ -349,7 +361,7 @@ def build_profile_confirm(profile: dict) -> str:
 從明天起每日 05:00 我會依照你的程度
 推送專屬客製化浪況早報給你！🌊
 
-隨時回傳新的資料可以更新你的衝浪檔案 🤙"""
+之後若要修改資料，請在開頭加上「修改」二字後重新填寫表單 🤙"""
 
 # ── LINE 簽章驗證 ─────────────────────────────────────────────
 def verify_signature(body: bytes, signature: str) -> bool:
@@ -496,15 +508,30 @@ def webhook():
                 name = get_line_display_name(user_id)
                 reply_message(reply_token, f"你好，{name}！\n你的 LINE 名稱是：{name}")
 
-            # 填寫/更新 Profile
+            # 填寫/更新 Profile（同一 LINE ID 只會有一筆檔案；已建檔過的話，
+            # 必須在訊息加上「修改/更新」才會覆寫，避免誤觸或重複建檔）
             elif "性別" in msg_text and "浪齡" in msg_text:
-                profile = parse_profile(msg_text)
-                if profile and user_id:
-                    save_profile(user_id, profile)
-                    reply_message(reply_token, build_profile_confirm(profile))
-                    print(f"[Profile 儲存] {user_id} → {profile}")
+                existing_profile = get_profile(user_id)
+                wants_edit = any(k in msg_text for k in ["修改", "更新", "edit"])
+
+                if existing_profile and not wants_edit:
+                    reply_message(reply_token,
+                        "你已經建立過 Surfer 檔案了 🏄\n"
+                        "若要修改資料，請在開頭加上「修改」二字，再依照格式重新填寫並回傳喔！\n\n"
+                        "輸入「我的資料」可先查看目前的檔案內容。")
                 else:
-                    reply_message(reply_token, "格式好像有點問題 🤔\n請參考範例重新填寫喔！")
+                    profile = parse_profile(msg_text)
+                    if profile and user_id:
+                        ok, msg = save_profile(user_id, profile)
+                        if ok:
+                            merged = {**(existing_profile or {}), **profile}
+                            reply_message(reply_token, build_profile_confirm(merged, is_update=bool(existing_profile)))
+                            print(f"[Profile {'更新' if existing_profile else '儲存'}] {user_id} → {profile}")
+                        else:
+                            reply_message(reply_token, "⚠️ 資料儲存失敗，請稍後再試一次。")
+                            print(f"[Profile 儲存失敗] {user_id} → {msg}")
+                    else:
+                        reply_message(reply_token, "格式好像有點問題 🤔\n請參考範例重新填寫喔！")
 
             # 查詢自己的 Profile
             elif any(k in msg_text for k in ["我的資料", "我的檔案", "查詢資料"]):

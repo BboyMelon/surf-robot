@@ -189,6 +189,7 @@ id, line_id (UNIQUE), display_name, gender, surf_years, board_type, fav_spots, u
 
 ### 🟢 低優先
 - [ ] 訂閱開關（用戶自助暫停/恢復）
+- [x] Surfer 檔案新增「名稱」欄位 + 防重複建檔 ✅（2026-06-22 完成。`db.py` profiles 表新增 `nickname` 欄位，`save_profile()` 改為只更新有傳入的欄位（修復先前每次填表會把 `display_name` 清空的 bug）；已建檔的 LINE ID 若沒有在訊息加上「修改」二字，重送表單會被擋下並提示，避免誤觸覆寫。**部署前需先到 Supabase SQL Editor 執行 `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS nickname text;`**）
 - [x] 潮汐時間 ✅（CWA F-A0021-001，2026-06-22 完成。`config.py` 新增 `TIDE_STATION_MAP` 15浪點對應潮汐站；`broadcast.py` 新增 `fetch_tide_today()` / `build_tide_line()`；單一浪點即時查詢會附上今日滿潮/乾潮時刻表 + 下次潮汐倒數）
 - [x] Render 設定自動部署 ✅（GitHub Actions push main 自動觸發 Deploy Hook，已於 2026-06-12 確認運作中）
 - [x] Streamlit 後台部署 ✅（2026-06-12 部署到 Streamlit Community Cloud，手機可直接開網址查看 Surfer 檔案/訂閱名單，App 分享設定為 Public，管理員密碼 `surf123`）
