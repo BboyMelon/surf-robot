@@ -12,7 +12,7 @@ import schedule
 import requests
 from datetime import datetime
 from flask import Flask, request, abort
-from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, get_surf_level
+from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, get_surf_level
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name
 from broadcast import (
     fetch_marine_data, get_marine_data, swell_energy, is_offshore,
@@ -21,6 +21,7 @@ from broadcast import (
     fetch_tomorrow_forecast, build_tomorrow_full_report,
     surf_stars, ms_to_beaufort, spot_summary_line,
     build_overview_report,
+    fetch_tide_today, build_tide_line,
 )
 
 app = Flask(__name__)
@@ -119,6 +120,12 @@ def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str
         if safety:
             lines.append(f"⚠️ {safety}")
 
+        tide_id = TIDE_STATION_MAP.get(spot_name)
+        if tide_id:
+            tide_line = build_tide_line(fetch_tide_today(tide_id))
+            if tide_line:
+                lines.append(tide_line)
+
         if profile:
             rating = personal_rating(wave_h, period, profile)
             lines.append(f"💬 {rating}")
@@ -199,6 +206,7 @@ HELP_TEXT = """📖 指令總覽
   北部 / 中部 / 東部 / 南部
   花蓮 / 台東 / 恆春 / 墾丁
   烏石港、外澳、翡翠灣、南灣…
+  （單一浪點查詢會附上今日潮汐時刻 🌙）
 
 📅 【預報查詢】
   明日 / 明天浪況 / 明日預報

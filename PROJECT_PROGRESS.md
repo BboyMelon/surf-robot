@@ -188,10 +188,10 @@ id, line_id (UNIQUE), display_name, gender, surf_years, board_type, fav_spots, u
 - [x] **明日預報**：Open-Meteo hourly，廣播底部附概覽 + 「明日」指令查完整版 ✅
 
 ### 🟢 低優先
-- [ ] 全台浪點總覽指令（打「總覽」）
 - [ ] 訂閱開關（用戶自助暫停/恢復）
-- [ ] 潮汐時間（CWA F-A0021-001）
-- [ ] Render 設定自動部署（目前需手動 Manual Deploy）
+- [x] 潮汐時間 ✅（CWA F-A0021-001，2026-06-22 完成。`config.py` 新增 `TIDE_STATION_MAP` 15浪點對應潮汐站；`broadcast.py` 新增 `fetch_tide_today()` / `build_tide_line()`；單一浪點即時查詢會附上今日滿潮/乾潮時刻表 + 下次潮汐倒數）
+- [x] Render 設定自動部署 ✅（GitHub Actions push main 自動觸發 Deploy Hook，已於 2026-06-12 確認運作中）
+- [x] Streamlit 後台部署 ✅（2026-06-12 部署到 Streamlit Community Cloud，手機可直接開網址查看 Surfer 檔案/訂閱名單，App 分享設定為 Public，管理員密碼 `surf123`）
 
 ### 💡 未來功能（暫緩）
 - [ ] **影片連結投稿**：浪友傳 `📹 烏石港 https://...`，機器人存 surf_videos 表，廣播附「今日影片」

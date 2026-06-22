@@ -24,6 +24,7 @@ CWA_MARINE_URL = (
     "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-B0075-001"
     f"?Authorization={CWA_API_KEY}&format=JSON"
 )
+CWA_TIDE_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-A0021-001"
 
 # ── 浪點 → 最近浮標站對應表（CWA O-B0075-001）──────────────
 SPOT_STATION_MAP = {
@@ -283,6 +284,63 @@ def fetch_tomorrow_forecast() -> dict:
         print(f"[明日預報 API 錯誤] {e}")
 
     return result
+
+
+# ── 步驟 A4：CWA 潮汐預報（F-A0021-001，今日滿潮/乾潮時刻）──────
+def fetch_tide_today(location_id: str) -> dict:
+    """
+    取得指定潮汐站「今天」的潮汐時刻表。
+    回傳格式：{"tide_range": "小"/"中"/"大", "events": [{"time": "03:30", "type": "乾潮", "height_cm": "25"}, ...]}
+    查無資料（站點錯誤或當天無預報）則回傳空 dict。
+    """
+    today = datetime.now(TW_TZ).strftime("%Y-%m-%d")
+    try:
+        resp = requests.get(
+            CWA_TIDE_URL,
+            params={"Authorization": CWA_API_KEY, "format": "JSON", "LocationId": location_id},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        forecasts = resp.json()["records"]["TideForecasts"]
+        if not forecasts:
+            return {}
+
+        daily = forecasts[0]["Location"]["TimePeriods"]["Daily"]
+        today_entry = next((day for day in daily if day["Date"] == today), None)
+        if not today_entry:
+            return {}
+
+        events = sorted(today_entry["Time"], key=lambda t: t["DateTime"])
+        return {
+            "tide_range": today_entry.get("TideRange", "—"),
+            "events": [
+                {
+                    "time":      ev["DateTime"][11:16],
+                    "type":      ev["Tide"],
+                    "height_cm": ev["TideHeights"].get("AboveTWVD", "—"),
+                }
+                for ev in events
+            ],
+        }
+    except Exception as e:
+        print(f"[潮汐 API 錯誤] {e}")
+        return {}
+
+
+def build_tide_line(tide: dict) -> str:
+    """將潮汐時刻表格式化為文字（含下一次滿/乾潮提示）。查無資料回傳空字串。"""
+    events = tide.get("events") if tide else None
+    if not events:
+        return ""
+
+    now_hm = datetime.now(TW_TZ).strftime("%H:%M")
+    parts  = [f"{ev['type']} {ev['time']}" for ev in events]
+    line   = f"🌙 潮汐（{tide['tide_range']}潮）：" + "　".join(parts)
+
+    next_ev = next((ev for ev in events if ev["time"] > now_hm), None)
+    if next_ev:
+        line += f"\n⏰ 下次{next_ev['type']} {next_ev['time']}"
+    return line
 
 
 # ── 資料取得入口（CWA 優先，失敗改用 Open-Meteo，最多 retry 2 次）──
