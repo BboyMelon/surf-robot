@@ -3,7 +3,7 @@
 ## 專案資訊
 - **專案名稱**：LINE 浪況自動訂閱與回報機器人
 - **專案路徑**：`/Users/melon/Downloads/melon-agent/surf_robot/`
-- **最後更新**：2026-06-22
+- **最後更新**：2026-06-25
 - **部署網址**：https://surf-robot.onrender.com
 - **Streamlit 後台**：https://surf-robot-svyi2lsrzaeuxxgxrzxsys.streamlit.app/
 - **GitHub**：https://github.com/BboyMelon/surf-robot
@@ -32,7 +32,7 @@
 | 潮汐預報 | CWA `F-A0021-001` | 15 浪點對應最近潮汐站，查單一浪點時附今日滿潮/乾潮時刻 |
 | 颱風資料 | CWA `W-C0034-005` | 距台灣 1000km 內偵測到新熱帶氣旋即推播 |
 | 推播 | LINE Messaging API | Push（排程廣播）+ Reply（互動查詢） |
-| 部署 | Render.com（Free） | gunicorn 單 worker；Free 方案會 spin-down，靠 GitHub Actions 每 5 分鐘 ping `/health` 維持喚醒 |
+| 部署 | Render.com（Free） | gunicorn 單 worker；⚠️ **2026-06-24 因免費方案 instance hours 額度用盡被 Render 強制暫停**，要等下個帳單週期重置或升級方案才會恢復，目前 webhook/廣播/警戒全部不會動。原本 GitHub Actions 24小時不間斷每5分鐘 ping `/health` 防 spin-down，已確認是燒光額度的主因（醒著就算用量），2026-06-25 改成只在尖峰時段保活 |
 | CI/CD | GitHub Actions（4 個 workflow） | `deploy.yml`（push main 自動部署）/ `keep_alive.yml`（防 spin-down）/ `broadcast.yml`（定時觸發廣播端點）/ `sync_sheets.yml`（定時同步 Sheet） |
 
 ---
@@ -124,7 +124,7 @@ surf_robot/
 | Render 背景執行緒 | `check_swell_alerts()` 長浪警戒 | 每 3 小時 |
 | Render 背景執行緒 | `check_typhoon_alerts()` 颱風警報 | 每 1 小時 |
 | GitHub Actions `sync_sheets.yml` | Supabase → Google Sheet 同步 | 每日台灣 04:30 |
-| GitHub Actions `keep_alive.yml` | ping `/health` 防 spin-down | 每 5 分鐘 |
+| GitHub Actions `keep_alive.yml` | ping `/health` 防 spin-down | 每 5 分鐘，**限台灣 05:00-10:00、14:00-20:00 尖峰時段**（2026-06-25 起，原本24小時不間斷） |
 
 ---
 
@@ -139,16 +139,23 @@ surf_robot/
 - **2026-06-22 程式碼優化**：`CWA_API_KEY` 改走環境變數、警戒推播時區修正（`TW_TZ`）、浪齡 0 誤判修正
 - **2026-06-22 CWA SSL 修復**：Render 上 CWA API 連線失敗問題（見上方待辦清單說明），改用 `curl` 子行程解決；潮汐時刻顯示排版優化（兩欄分行，原本一行擠 4 個時刻不好讀）
 - **2026-06-22 風向顯示修復**：`WIND_DIR_MAP` 中英對照表原本只用於內部判斷陸風，從未套用到顯示文字，風向一直顯示英文縮寫（SW/NE...）；同時修正明日預報誤把「浪向」標成「風向」的錯誤標籤
+- **2026-06-25 颱風期間浮標資料過期 bug 修復**：颱風（米克拉，距台410km）期間 CWA 整份浮標資料集卡在 45 小時前沒更新，`fetch_marine_data()` 從未驗證 `DateTime` 新鮮度，也沒區分「感測器回傳字串"None"」跟「真的測到0」，導致機器人拿颱風來之前的平靜假象（0.3-1.3m🟢）當即時資料推薦。新增 `MARINE_DATA_MAX_AGE_HOURS = 3` 新鮮度檢查，過期或感測器離線改觸發既有 Open-Meteo 備援；修復後驗證真實颱風大浪是 1.2-2.8m、多數🔴進階。長浪警戒 `check_swell_alerts()` 共用同一資料源，這段時間很可能因舊資料沒觸發到該發的警戒，已隨此修復一併解決。Commit `9aa5380`
+- **2026-06-25 keep-alive 縮減保活時段**：原本24小時不間斷每5分鐘ping，等同服務24/7不睡覺，把 Render 免費方案 instance hours 額度提前燒完（這次被停權的主因）。改成只在台灣 05:00-10:00、14:00-20:00（對應兩次廣播+查浪高峰）保活，其他時段放給它睡。代價：非尖峰時段傳 LINE 訊息會遇到約30-60秒冷啟動延遲。Commit `24d9edf`
 
 ---
 
 ## 待辦清單
 
 ### 下一步
+- [ ] **等 Render 帳單週期重置**（或評估升級方案）：2026-06-24 因免費額度用盡被暫停，需到 Render Dashboard → Settings → Billing 確認重置日期，恢復前 webhook/廣播/警戒全部不會動
 - [ ] **今日最佳浪點推薦擴充**：目前已有基本版（`find_best_spots()`），可再優化排序權重
 - [x] **重複邏輯整併** ✅（2026-06-22 完成。抽出共用函式 `build_spot_block()`，`build_report()`/`build_personal_report()`/`build_instant_report()` 三處改呼叫同一個函式，淨減少約 44 行；順手移除死變數 `wave_dir` 跟 webhook.py 5 個變多餘的 import）
 
 ### 低優先
+- [ ] **`broadcast()` N+1 查詢**：每個訂閱者個別呼叫 `get_profile()`（broadcast.py），應改用已存在的 `get_all_profiles()` 批次查詢後查表（`remind_incomplete_profiles()` 已經是這樣寫，可參考），目前訂閱者少不影響，未來人數增加才會浮現
+- [ ] **LINE Push/Reply 重複邏輯**：`webhook.py`（push_message/reply_message/reply_flex）跟 `broadcast.py`（push_line_message）幾乎是同一段程式碼分別寫兩份，可考慮抽成共用 helper（如獨立 `line_api.py`）
+- [ ] **Webhook 同步呼叫外部 API**：使用者查浪點/總覽/明日預報時，`/webhook` 在回覆前同步打 CWA/Open-Meteo，流量大時有延遲風險（LINE 建議 webhook 盡快回應）
+- [ ] `reply_flex`/`reply_message` 沒有像 `push_message` 一樣檢查回應狀態碼並記 log，三者行為不一致
 - [ ] 訂閱開關（用戶自助暫停/恢復）
 - [ ] 警戒 de-dup 持久化（目前存在記憶體，Render 重啟後重置，可考慮存 Supabase `alerts_log` 表）
 - [x] LINE_CHANNEL_SECRET 金鑰輪替 ✅（2026-06-22 完成，LINE Console 重新產生 + Render/本機 .env 同步更新，傳訊息測試正常）
