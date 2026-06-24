@@ -101,6 +101,12 @@ def degrees_to_compass(deg: float) -> str:
     return dirs[round(deg / 22.5) % 16]
 
 
+# 浮標資料新鮮度門檻（小時）。颱風期間浮標常斷線，CWA 仍會持續回傳斷線前
+# 的最後一筆紀錄而不會報錯，必須自己檢查時間，否則會把颱風來之前的「平靜」
+# 假象當成即時浪況繼續推薦。
+MARINE_DATA_MAX_AGE_HOURS = 3
+
+
 # ── 步驟 A：抓取 CWA 浮標觀測資料 ───────────────────────
 def fetch_marine_data() -> dict:
     """
@@ -147,9 +153,33 @@ def fetch_marine_data() -> dict:
                 # CWA API 有時回傳字串 "None" 而非 Python None
                 return "—" if not val or str(val).strip() in ("None", "null", "") else str(val)
 
+            # 新鮮度檢查：時間格式異常時不擋資料（避免誤殺），只擋確認過期的
+            obs_time_str = latest.get("DateTime", "")
+            age_hours = 0.0
+            try:
+                obs_time = datetime.fromisoformat(obs_time_str)
+                age_hours = (datetime.now(TW_TZ) - obs_time).total_seconds() / 3600
+            except (ValueError, TypeError):
+                pass
+
+            # 浪高/週期感測器若沒有實際回傳數值，CWA 會給字串 "None"；這跟
+            # 「真的測到 0」是完全不同的意思，不能套用 safe_float 的 0.0 預設值
+            raw_wave_height = we.get("WaveHeight")
+            raw_wave_period = we.get("WavePeriod")
+            wave_sensor_down = (
+                str(raw_wave_height).strip() in ("None", "null", "")
+                or str(raw_wave_period).strip() in ("None", "null", "")
+            )
+
+            if age_hours > MARINE_DATA_MAX_AGE_HOURS or wave_sensor_down:
+                if sid in STATION_COORDS:  # 只記錄我們實際監測的浪點站，避免洗版
+                    print(f"  ⚠️ 站號 {sid} 資料異常（過期 {age_hours:.1f} 小時，"
+                          f"浪高感測器離線={wave_sensor_down}），略過此站")
+                continue
+
             result[sid] = {
-                "wave_height": safe_float(we.get("WaveHeight")),
-                "wave_period": safe_float(we.get("WavePeriod")),
+                "wave_height": safe_float(raw_wave_height),
+                "wave_period": safe_float(raw_wave_period),
                 "wave_dir":    safe_str(we.get("WaveDirectionDescription")),
                 "wind_speed":  safe_float(anemo.get("WindSpeed")),
                 "wind_dir":    safe_str(anemo.get("WindDirectionDescription")),
