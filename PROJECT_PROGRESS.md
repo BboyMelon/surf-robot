@@ -46,6 +46,7 @@ surf_robot/
 ├── Procfile                  gunicorn webhook:app（Render 只跑這個）
 ├── config.py                 浪點設定、潮汐站對應表、陸風方向、GoOcean 分級
 ├── db.py                     Supabase / SQLite 雙後端資料層
+├── line_api.py                共用 LINE push/reply API 呼叫（2026-06-25新增，broadcast.py/webhook.py共用）
 ├── broadcast.py              抓資料、組訊息、廣播、警戒、潮汐查詢
 ├── webhook.py                LINE Webhook + 指令處理 + 背景排程
 ├── app.py                    Streamlit 後台（另外部署，Render 不會跑這個）
@@ -141,6 +142,7 @@ surf_robot/
 - **2026-06-22 風向顯示修復**：`WIND_DIR_MAP` 中英對照表原本只用於內部判斷陸風，從未套用到顯示文字，風向一直顯示英文縮寫（SW/NE...）；同時修正明日預報誤把「浪向」標成「風向」的錯誤標籤
 - **2026-06-25 颱風期間浮標資料過期 bug 修復**：颱風（米克拉，距台410km）期間 CWA 整份浮標資料集卡在 45 小時前沒更新，`fetch_marine_data()` 從未驗證 `DateTime` 新鮮度，也沒區分「感測器回傳字串"None"」跟「真的測到0」，導致機器人拿颱風來之前的平靜假象（0.3-1.3m🟢）當即時資料推薦。新增 `MARINE_DATA_MAX_AGE_HOURS = 3` 新鮮度檢查，過期或感測器離線改觸發既有 Open-Meteo 備援；修復後驗證真實颱風大浪是 1.2-2.8m、多數🔴進階。長浪警戒 `check_swell_alerts()` 共用同一資料源，這段時間很可能因舊資料沒觸發到該發的警戒，已隨此修復一併解決。Commit `9aa5380`
 - **2026-06-25 keep-alive 縮減保活時段**：原本24小時不間斷每5分鐘ping，等同服務24/7不睡覺，把 Render 免費方案 instance hours 額度提前燒完（這次被停權的主因）。改成只在台灣 05:00-10:00、14:00-20:00（對應兩次廣播+查浪高峰）保活，其他時段放給它睡。代價：非尖峰時段傳 LINE 訊息會遇到約30-60秒冷啟動延遲。Commit `24d9edf`
+- **2026-06-25 程式碼優化批次**：新增 `line_api.py` 統一 push/reply 呼叫（消除 webhook.py/broadcast.py 重複實作）；`broadcast()` 改批次查 profiles 修掉 N+1 查詢；`/webhook` 改成先回 200、事件處理丟背景執行緒，避免同步打外部 API 太慢造成 LINE 重送事件、重複處理。已用 Flask test client 驗證回應時間從數秒降到 3ms 內。Commit `dad463f`
 
 ---
 
@@ -152,10 +154,10 @@ surf_robot/
 - [x] **重複邏輯整併** ✅（2026-06-22 完成。抽出共用函式 `build_spot_block()`，`build_report()`/`build_personal_report()`/`build_instant_report()` 三處改呼叫同一個函式，淨減少約 44 行；順手移除死變數 `wave_dir` 跟 webhook.py 5 個變多餘的 import）
 
 ### 低優先
-- [ ] **`broadcast()` N+1 查詢**：每個訂閱者個別呼叫 `get_profile()`（broadcast.py），應改用已存在的 `get_all_profiles()` 批次查詢後查表（`remind_incomplete_profiles()` 已經是這樣寫，可參考），目前訂閱者少不影響，未來人數增加才會浮現
-- [ ] **LINE Push/Reply 重複邏輯**：`webhook.py`（push_message/reply_message/reply_flex）跟 `broadcast.py`（push_line_message）幾乎是同一段程式碼分別寫兩份，可考慮抽成共用 helper（如獨立 `line_api.py`）
-- [ ] **Webhook 同步呼叫外部 API**：使用者查浪點/總覽/明日預報時，`/webhook` 在回覆前同步打 CWA/Open-Meteo，流量大時有延遲風險（LINE 建議 webhook 盡快回應）
-- [ ] `reply_flex`/`reply_message` 沒有像 `push_message` 一樣檢查回應狀態碼並記 log，三者行為不一致
+- [x] **`broadcast()` N+1 查詢** ✅（2026-06-25 完成。改用 `get_all_profiles()` 批次查詢後查表，取代每位訂閱者各打一次 `get_profile()`）
+- [x] **LINE Push/Reply 重複邏輯** ✅（2026-06-25 完成。新增 `line_api.py` 統一 push/reply 呼叫，`webhook.py`/`broadcast.py` 改成 import 共用函式，原本各自的重複實作已移除）
+- [x] **Webhook 改非同步處理** ✅（2026-06-25 完成。`/webhook` 路由先回 200，事件處理丟進背景執行緒 `_process_events()`，避免同步打 CWA/Open-Meteo 太慢導致 LINE 重送事件造成重複處理。已用 Flask test client 驗證：回應時間從數秒降到 3ms 內）
+- [x] **reply 狀態檢查不一致** ✅（隨 line_api.py 整併一併解決，三個函式現在都經過同一個 `_post()` 統一檢查狀態碼+記 log）
 - [ ] 訂閱開關（用戶自助暫停/恢復）
 - [ ] 警戒 de-dup 持久化（目前存在記憶體，Render 重啟後重置，可考慮存 Supabase `alerts_log` 表）
 - [x] LINE_CHANNEL_SECRET 金鑰輪替 ✅（2026-06-22 完成，LINE Console 重新產生 + Render/本機 .env 同步更新，傳訊息測試正常）
