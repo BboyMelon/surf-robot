@@ -9,11 +9,16 @@ import base64
 import threading
 import time
 import schedule
-import requests
 from datetime import datetime
 from flask import Flask, request, abort
-from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL
+from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name
+from line_api import (
+    push_text as push_message,
+    reply_text as reply_message,
+    reply_flex,
+    get_display_name as get_line_display_name,
+)
 from broadcast import (
     get_marine_data,
     SPOT_STATION_MAP, build_spot_block,
@@ -395,53 +400,6 @@ def verify_signature(body: bytes, signature: str) -> bool:
     expected = base64.b64encode(hash_val).decode("utf-8")
     return hmac.compare_digest(expected, signature)
 
-# ── 取得 LINE 顯示名稱 ────────────────────────────────────────
-def get_line_display_name(user_id: str) -> str:
-    url = f"https://api.line.me/v2/bot/profile/{user_id}"
-    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            return resp.json().get("displayName", user_id)
-    except Exception:
-        pass
-    return user_id
-
-# ── 推送訊息 ──────────────────────────────────────────────────
-def push_message(to: str, text: str) -> None:
-    url = "https://api.line.me/v2/bot/message/push"
-    headers = {
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {"to": to, "messages": [{"type": "text", "text": text}]}
-    resp = requests.post(url, headers=headers, json=payload, timeout=10)
-    if resp.status_code != 200:
-        print(f"[Push 失敗] {resp.status_code} {resp.text}")
-
-# ── Reply Flex Message ────────────────────────────────────────
-def reply_flex(reply_token: str, flex: dict) -> None:
-    url = "https://api.line.me/v2/bot/message/reply"
-    headers = {
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {"replyToken": reply_token, "messages": [flex]}
-    requests.post(url, headers=headers, json=payload, timeout=10)
-
-# ── Reply Message ─────────────────────────────────────────────
-def reply_message(reply_token: str, text: str) -> None:
-    url = "https://api.line.me/v2/bot/message/reply"
-    headers = {
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "replyToken": reply_token,
-        "messages": [{"type": "text", "text": text}],
-    }
-    requests.post(url, headers=headers, json=payload, timeout=10)
-
 # ── Health Check ─────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
@@ -460,6 +418,10 @@ def trigger_broadcast():
     return "Broadcast triggered", 200
 
 # ── Webhook 主路由 ────────────────────────────────────────────
+# events 的實際處理放進背景執行緒：浪點查詢/總覽/明日預報都會同步打
+# CWA/Open-Meteo，慢的話可能要等多秒，LINE 那邊收不到即時的200回應就可能
+# 重送同一個事件，導致重複處理（重複回覆、甚至重複建檔）。先回 200 給LINE，
+# 實際查資料+回覆訊息在背景做，兩邊互不影響（reply token 不受HTTP回應時機限制）。
 @app.route("/webhook", methods=["POST"])
 def webhook():
     signature = request.headers.get("X-Line-Signature", "")
@@ -469,7 +431,11 @@ def webhook():
         abort(400, "Invalid signature")
 
     events = request.json.get("events", [])
+    threading.Thread(target=_process_events, args=(events,), daemon=True).start()
+    return "OK", 200
 
+
+def _process_events(events: list) -> None:
     for event in events:
         event_type  = event.get("type")
         source      = event.get("source", {})
@@ -610,8 +576,6 @@ def webhook():
                             "找不到對應的浪點或指令 🤔\n"
                             "輸入 help 查看支援的地區與浪點名稱 👇"
                         )
-
-    return "OK", 200
 
 
 # ── 背景排程執行緒（Render 上唯一跑排程的地方）──────────────

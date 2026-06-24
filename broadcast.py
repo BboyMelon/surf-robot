@@ -18,8 +18,9 @@ from datetime import datetime, timedelta, timezone
 
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
-from config import LINE_CHANNEL_ACCESS_TOKEN, SURF_SPOTS_CONFIG, CWA_API_KEY, get_surf_level
-from db import get_all_members, get_all_groups, get_all_profiles, get_profile
+from config import SURF_SPOTS_CONFIG, CWA_API_KEY, get_surf_level
+from db import get_all_members, get_all_groups, get_all_profiles
+from line_api import push_text as push_line_message
 
 # CWA 開放資料平台的證書鏈缺少 Subject Key Identifier 欄位。Render 上的 Python
 # ssl 模組（OpenSSL 3.2+）在憑證鏈解析階段就直接拒絕連線，不管 verify=False
@@ -775,22 +776,6 @@ def build_tomorrow_full_report(forecast: dict) -> str:
     return "\n".join(lines)
 
 
-# ── LINE Push 廣播 ────────────────────────────────────────
-def push_line_message(to: str, text: str) -> bool:
-    url = "https://api.line.me/v2/bot/message/push"
-    headers = {
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {"to": to, "messages": [{"type": "text", "text": text}]}
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        return resp.status_code == 200
-    except Exception as e:
-        print(f"  [Push 失敗] to={to[:10]}... err={e}")
-        return False
-
-
 # ── 主廣播任務 ────────────────────────────────────────────
 def build_personal_report(marine: dict, profile: dict) -> str:
     """為有 Profile 的使用者產生個人化簡報（只顯示常衝浪點）。"""
@@ -870,6 +855,7 @@ def broadcast():
 
     members  = get_all_members()
     groups   = get_all_groups()
+    profiles = {p["line_id"]: p for p in get_all_profiles()}  # 一次批次查，避免每位訂閱者各打一次DB
     ok, fail = 0, 0
 
     # 個人：依 profile 個人化
@@ -877,7 +863,7 @@ def broadcast():
         lid = m.get("line_id", "")
         if not lid or not lid.startswith("U"):
             continue
-        profile = get_profile(lid)
+        profile = profiles.get(lid)
         if profile and profile.get("surf_years") is not None:
             msg = build_personal_report(marine, profile)
         else:
