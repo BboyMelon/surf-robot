@@ -441,183 +441,187 @@ def webhook():
 
 def _process_events(events: list) -> None:
     for event in events:
-        event_type  = event.get("type")
-        source      = event.get("source", {})
-        source_type = source.get("type")
-        reply_token = event.get("replyToken", "")
+        try:
+            event_type  = event.get("type")
+            source      = event.get("source", {})
+            source_type = source.get("type")
+            reply_token = event.get("replyToken", "")
 
-        # ── 個人加好友 ────────────────────────────────────────
-        if event_type == "follow" and source_type == "user":
-            user_id = source.get("userId")
-            add_member(email="", line_id=user_id)
-            push_message(user_id, build_welcome(is_group=False))
-            print(f"[Follow] {user_id}")
+            # ── 個人加好友 ────────────────────────────────────────
+            if event_type == "follow" and source_type == "user":
+                user_id = source.get("userId")
+                add_member(email="", line_id=user_id)
+                push_message(user_id, build_welcome(is_group=False))
+                print(f"[Follow] {user_id}")
 
-        # ── 封鎖 / 取消加好友 ─────────────────────────────────
-        elif event_type == "unfollow" and source_type == "user":
-            user_id = source.get("userId")
-            remove_member(user_id)
-            print(f"[Unfollow] {user_id}")
+            # ── 封鎖 / 取消加好友 ─────────────────────────────────
+            elif event_type == "unfollow" and source_type == "user":
+                user_id = source.get("userId")
+                remove_member(user_id)
+                print(f"[Unfollow] {user_id}")
 
-        # ── 機器人加入群組 ────────────────────────────────────
-        elif event_type == "join" and source_type == "group":
-            group_id = source.get("groupId")
-            add_group(group_id)
-            push_message(group_id, build_welcome(is_group=True))
-            print(f"[Join] {group_id}")
+            # ── 機器人加入群組 ────────────────────────────────────
+            elif event_type == "join" and source_type == "group":
+                group_id = source.get("groupId")
+                add_group(group_id)
+                push_message(group_id, build_welcome(is_group=True))
+                print(f"[Join] {group_id}")
 
-        # ── 機器人被踢出群組 ──────────────────────────────────
-        elif event_type == "leave" and source_type == "group":
-            group_id = source.get("groupId")
-            remove_group(group_id)
-            print(f"[Leave] {group_id}")
+            # ── 機器人被踢出群組 ──────────────────────────────────
+            elif event_type == "leave" and source_type == "group":
+                group_id = source.get("groupId")
+                remove_group(group_id)
+                print(f"[Leave] {group_id}")
 
-        # ── 文字訊息處理 ──────────────────────────────────────
-        elif event_type == "message" and event.get("message", {}).get("type") == "text":
-            msg_text = event["message"]["text"]
-            user_id  = source.get("userId", "")
+            # ── 文字訊息處理 ──────────────────────────────────────
+            elif event_type == "message" and event.get("message", {}).get("type") == "text":
+                msg_text = event["message"]["text"]
+                user_id  = source.get("userId", "")
 
-            # 只在 DB 尚無名稱時才呼叫 LINE API（減少呼叫次數）
-            if user_id:
-                existing = get_profile(user_id)
-                if not existing or not existing.get("display_name"):
-                    display_name = get_line_display_name(user_id)
-                    update_display_name(user_id, display_name)
+                # 只在 DB 尚無名稱時才呼叫 LINE API（減少呼叫次數）
+                if user_id:
+                    existing = get_profile(user_id)
+                    if not existing or not existing.get("display_name"):
+                        display_name = get_line_display_name(user_id)
+                        update_display_name(user_id, display_name)
 
-            # ── 圖文選單觸發 ──────────────────────────────────
-            if "🔍 即時浪況查詢" in msg_text:
-                reply_message(reply_token, SPOT_QUERY_HINT)
+                # ── 圖文選單觸發 ──────────────────────────────────
+                if "🔍 即時浪況查詢" in msg_text:
+                    reply_message(reply_token, SPOT_QUERY_HINT)
 
-            elif "📝 Surfer 檔案建立" in msg_text:
-                reply_message(reply_token, PROFILE_FORM)
+                elif "📝 Surfer 檔案建立" in msg_text:
+                    reply_message(reply_token, PROFILE_FORM)
 
-            elif "📚 專業海象觀測網" in msg_text:
-                reply_flex(reply_token, build_ocean_links_flex())
+                elif "📚 專業海象觀測網" in msg_text:
+                    reply_flex(reply_token, build_ocean_links_flex())
 
-            elif "🗺️ Windy 動態地圖" in msg_text:
-                reply_message(reply_token,
-                    "🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\nhttps://www.windy.com/?waves,23.8,121.8,6")
-
-            # 訂閱表單邀請
-            elif any(k in msg_text for k in ["訂閱", "立即訂閱", "加入訂閱", "訂閱表單"]):
-                reply_flex(reply_token, build_subscribe_flex())
-
-            # 查詢自己名稱
-            elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):
-                name = get_line_display_name(user_id)
-                reply_message(reply_token, f"你好，{name}！\n你的 LINE 名稱是：{name}")
-
-            # 填寫/更新 Profile（同一 LINE ID 只會有一筆檔案；已建檔過的話，
-            # 必須在訊息加上「修改/更新」才會覆寫，避免誤觸或重複建檔）
-            elif "性別" in msg_text and "浪齡" in msg_text:
-                existing_profile = get_profile(user_id)
-                wants_edit = any(k in msg_text for k in ["修改", "更新", "edit"])
-
-                if existing_profile and not wants_edit:
+                elif "🗺️ Windy 動態地圖" in msg_text:
                     reply_message(reply_token,
-                        "你已經建立過 Surfer 檔案了 🏄\n"
-                        "若要修改資料，請在開頭加上「修改」二字，再依照格式重新填寫並回傳喔！\n\n"
-                        "輸入「我的資料」可先查看目前的檔案內容。")
-                else:
-                    profile = parse_profile(msg_text)
-                    if profile and user_id:
-                        ok, msg = save_profile(user_id, profile)
-                        if ok:
-                            merged = {**(existing_profile or {}), **profile}
-                            reply_message(reply_token, build_profile_confirm(merged, is_update=bool(existing_profile)))
-                            print(f"[Profile {'更新' if existing_profile else '儲存'}] {user_id} → {profile}")
+                        "🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\nhttps://www.windy.com/?waves,23.8,121.8,6")
+
+                # 訂閱表單邀請
+                elif any(k in msg_text for k in ["訂閱", "立即訂閱", "加入訂閱", "訂閱表單"]):
+                    reply_flex(reply_token, build_subscribe_flex())
+
+                # 查詢自己名稱
+                elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):
+                    name = get_line_display_name(user_id)
+                    reply_message(reply_token, f"你好，{name}！\n你的 LINE 名稱是：{name}")
+
+                # 填寫/更新 Profile（同一 LINE ID 只會有一筆檔案；已建檔過的話，
+                # 必須在訊息加上「修改/更新」才會覆寫，避免誤觸或重複建檔）
+                elif "性別" in msg_text and "浪齡" in msg_text:
+                    existing_profile = get_profile(user_id)
+                    wants_edit = any(k in msg_text for k in ["修改", "更新", "edit"])
+
+                    if existing_profile and not wants_edit:
+                        reply_message(reply_token,
+                            "你已經建立過 Surfer 檔案了 🏄\n"
+                            "若要修改資料，請在開頭加上「修改」二字，再依照格式重新填寫並回傳喔！\n\n"
+                            "輸入「我的資料」可先查看目前的檔案內容。")
+                    else:
+                        profile = parse_profile(msg_text)
+                        if profile and user_id:
+                            ok, msg = save_profile(user_id, profile)
+                            if ok:
+                                merged = {**(existing_profile or {}), **profile}
+                                reply_message(reply_token, build_profile_confirm(merged, is_update=bool(existing_profile)))
+                                print(f"[Profile {'更新' if existing_profile else '儲存'}] {user_id} → {profile}")
+                            else:
+                                reply_message(reply_token, "⚠️ 資料儲存失敗，請稍後再試一次。")
+                                print(f"[Profile 儲存失敗] {user_id} → {msg}")
                         else:
-                            reply_message(reply_token, "⚠️ 資料儲存失敗，請稍後再試一次。")
-                            print(f"[Profile 儲存失敗] {user_id} → {msg}")
+                            reply_message(reply_token, "格式好像有點問題 🤔\n請參考範例重新填寫喔！")
+
+                # 查詢自己的 Profile
+                elif any(k in msg_text for k in ["我的資料", "我的檔案", "查詢資料"]):
+                    p = get_profile(user_id)
+                    if p:
+                        reply_message(reply_token, build_profile_confirm(p))
                     else:
-                        reply_message(reply_token, "格式好像有點問題 🤔\n請參考範例重新填寫喔！")
+                        reply_message(reply_token, build_no_profile_prompt())
 
-            # 查詢自己的 Profile
-            elif any(k in msg_text for k in ["我的資料", "我的檔案", "查詢資料"]):
-                p = get_profile(user_id)
-                if p:
-                    reply_message(reply_token, build_profile_confirm(p))
-                else:
-                    reply_message(reply_token, build_no_profile_prompt())
-
-            # 暫停推播
-            elif any(k in msg_text for k in ["暫停推播", "暫停訂閱", "停止推播", "停止訂閱"]):
-                status = get_member_status(user_id)
-                if status == "paused":
-                    reply_message(reply_token, "你的每日推播已經是暫停狀態了 🔕\n輸入「恢復推播」即可重新開啟。")
-                elif status == "active":
-                    ok, _ = pause_member(user_id)
-                    if ok:
+                # 暫停推播
+                elif any(k in msg_text for k in ["暫停推播", "暫停訂閱", "停止推播", "停止訂閱"]):
+                    status = get_member_status(user_id)
+                    if status == "paused":
+                        reply_message(reply_token, "你的每日推播已經是暫停狀態了 🔕\n輸入「恢復推播」即可重新開啟。")
+                    elif status == "active":
+                        ok, _ = pause_member(user_id)
+                        if ok:
+                            reply_message(reply_token,
+                                "🔕 每日浪況推播已暫停。\n\n"
+                                "長浪警戒與颱風通知仍會正常推送。\n"
+                                "隨時輸入「恢復推播」就可以重新開啟 🌊")
+                        else:
+                            reply_message(reply_token, "⚠️ 暫停失敗，請稍後再試。")
+                    else:
                         reply_message(reply_token,
-                            "🔕 每日浪況推播已暫停。\n\n"
-                            "長浪警戒與颱風通知仍會正常推送。\n"
-                            "隨時輸入「恢復推播」就可以重新開啟 🌊")
-                    else:
-                        reply_message(reply_token, "⚠️ 暫停失敗，請稍後再試。")
-                else:
-                    reply_message(reply_token,
-                        "你目前不在訂閱名單中 🤔\n"
-                        "重新加好友即可自動加入每日推播！")
+                            "你目前不在訂閱名單中 🤔\n"
+                            "重新加好友即可自動加入每日推播！")
 
-            # 恢復推播
-            elif any(k in msg_text for k in ["恢復推播", "繼續推播", "恢復訂閱", "繼續訂閱", "開啟推播"]):
-                status = get_member_status(user_id)
-                if status == "active":
-                    reply_message(reply_token, "你的每日推播已經是開啟狀態了 🌊\n每天 05:00 和 15:00 都會收到浪況喔！")
-                elif status == "paused":
-                    ok, _ = resume_member(user_id)
-                    if ok:
+                # 恢復推播
+                elif any(k in msg_text for k in ["恢復推播", "繼續推播", "恢復訂閱", "繼續訂閱", "開啟推播"]):
+                    status = get_member_status(user_id)
+                    if status == "active":
+                        reply_message(reply_token, "你的每日推播已經是開啟狀態了 🌊\n每天 05:00 和 15:00 都會收到浪況喔！")
+                    elif status == "paused":
+                        ok, _ = resume_member(user_id)
+                        if ok:
+                            reply_message(reply_token,
+                                "✅ 每日浪況推播已恢復！\n\n"
+                                "每天 05:00（早報）和 15:00（下午快報）都會收到最新浪況 🌊\n"
+                                "需要暫停時輸入「暫停推播」即可。")
+                        else:
+                            reply_message(reply_token, "⚠️ 恢復失敗，請稍後再試。")
+                    else:
                         reply_message(reply_token,
-                            "✅ 每日浪況推播已恢復！\n\n"
-                            "每天 05:00（早報）和 15:00（下午快報）都會收到最新浪況 🌊\n"
-                            "需要暫停時輸入「暫停推播」即可。")
-                    else:
-                        reply_message(reply_token, "⚠️ 恢復失敗，請稍後再試。")
-                else:
-                    reply_message(reply_token,
-                        "你目前不在訂閱名單中 🤔\n"
-                        "重新加好友即可自動加入每日推播！")
+                            "你目前不在訂閱名單中 🤔\n"
+                            "重新加好友即可自動加入每日推播！")
 
-            # 指令總覽
-            elif any(k in msg_text for k in ["help", "Help", "HELP", "指令", "說明", "功能"]):
-                reply_message(reply_token, HELP_TEXT)
+                # 指令總覽
+                elif any(k in msg_text for k in ["help", "Help", "HELP", "指令", "說明", "功能"]):
+                    reply_message(reply_token, HELP_TEXT)
 
-            # 全台總覽
-            elif any(k in msg_text for k in ["總覽", "全台", "overview"]):
-                marine = get_marine_data()
-                if marine:
-                    reply_message(reply_token, build_overview_report(marine))
-                else:
-                    reply_message(reply_token, "⚠️ 目前無法取得浪況資料，請稍後再試。")
-
-            # 明日預報查詢
-            elif any(k in msg_text for k in ["明日預報", "明天浪況", "明日浪況", "明天預報", "明日"]):
-                forecast = fetch_tomorrow_forecast()
-                if forecast:
-                    reply_message(reply_token, build_tomorrow_full_report(forecast))
-                else:
-                    reply_message(reply_token, "⚠️ 目前無法取得明日預報資料，請稍後再試。")
-
-            # 其餘訊息：先嘗試浪點查詢，否則引導未建檔用戶填資料
-            else:
-                query_spots = detect_query_spots(msg_text)
-                if query_spots:
+                # 全台總覽
+                elif any(k in msg_text for k in ["總覽", "全台", "overview"]):
                     marine = get_marine_data()
                     if marine:
-                        p = get_profile(user_id)
-                        reply_message(reply_token, build_instant_report(query_spots, marine, p))
+                        reply_message(reply_token, build_overview_report(marine))
                     else:
                         reply_message(reply_token, "⚠️ 目前無法取得浪況資料，請稍後再試。")
-                else:
-                    p = get_profile(user_id)
-                    if not p:
-                        name = get_line_display_name(user_id)
-                        reply_message(reply_token, build_no_profile_prompt(name))
+
+                # 明日預報查詢
+                elif any(k in msg_text for k in ["明日預報", "明天浪況", "明日浪況", "明天預報", "明日"]):
+                    forecast = fetch_tomorrow_forecast()
+                    if forecast:
+                        reply_message(reply_token, build_tomorrow_full_report(forecast))
                     else:
-                        reply_message(reply_token,
-                            "找不到對應的浪點或指令 🤔\n"
-                            "輸入 help 查看支援的地區與浪點名稱 👇"
-                        )
+                        reply_message(reply_token, "⚠️ 目前無法取得明日預報資料，請稍後再試。")
+
+                # 其餘訊息：先嘗試浪點查詢，否則引導未建檔用戶填資料
+                else:
+                    query_spots = detect_query_spots(msg_text)
+                    if query_spots:
+                        marine = get_marine_data()
+                        if marine:
+                            p = get_profile(user_id)
+                            reply_message(reply_token, build_instant_report(query_spots, marine, p))
+                        else:
+                            reply_message(reply_token, "⚠️ 目前無法取得浪況資料，請稍後再試。")
+                    else:
+                        p = get_profile(user_id)
+                        if not p:
+                            name = get_line_display_name(user_id)
+                            reply_message(reply_token, build_no_profile_prompt(name))
+                        else:
+                            reply_message(reply_token,
+                                "找不到對應的浪點或指令 🤔\n"
+                                "輸入 help 查看支援的地區與浪點名稱 👇"
+                            )
+
+        except Exception as e:
+            print(f"[_process_events 錯誤] event={event.get('type')} err={e}")
 
 
 # ── 背景排程執行緒（Render 上唯一跑排程的地方）──────────────
