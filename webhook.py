@@ -12,7 +12,7 @@ import schedule
 from datetime import datetime
 from flask import Flask, request, abort
 from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL
-from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name
+from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status
 from line_api import (
     push_text as push_message,
     reply_text as reply_message,
@@ -200,6 +200,10 @@ HELP_TEXT = """📖 指令總覽
   我的資料 → 查看 Surfer 檔案
   我的ID   → 查看 LINE ID
   已建檔後若要修改，請在表單開頭加上「修改」二字
+
+🔕 【推播開關】
+  暫停推播 → 暫停每日廣播（隨時可恢復）
+  恢復推播 → 重新開啟每日廣播
 
 ⏰ 【自動警戒】
   長浪警戒（波高 ≥1.5m 且週期 ≥8s）
@@ -535,6 +539,44 @@ def _process_events(events: list) -> None:
                     reply_message(reply_token, build_profile_confirm(p))
                 else:
                     reply_message(reply_token, build_no_profile_prompt())
+
+            # 暫停推播
+            elif any(k in msg_text for k in ["暫停推播", "暫停訂閱", "停止推播", "停止訂閱"]):
+                status = get_member_status(user_id)
+                if status == "paused":
+                    reply_message(reply_token, "你的每日推播已經是暫停狀態了 🔕\n輸入「恢復推播」即可重新開啟。")
+                elif status == "active":
+                    ok, _ = pause_member(user_id)
+                    if ok:
+                        reply_message(reply_token,
+                            "🔕 每日浪況推播已暫停。\n\n"
+                            "長浪警戒與颱風通知仍會正常推送。\n"
+                            "隨時輸入「恢復推播」就可以重新開啟 🌊")
+                    else:
+                        reply_message(reply_token, "⚠️ 暫停失敗，請稍後再試。")
+                else:
+                    reply_message(reply_token,
+                        "你目前不在訂閱名單中 🤔\n"
+                        "重新加好友即可自動加入每日推播！")
+
+            # 恢復推播
+            elif any(k in msg_text for k in ["恢復推播", "繼續推播", "恢復訂閱", "繼續訂閱", "開啟推播"]):
+                status = get_member_status(user_id)
+                if status == "active":
+                    reply_message(reply_token, "你的每日推播已經是開啟狀態了 🌊\n每天 05:00 和 15:00 都會收到浪況喔！")
+                elif status == "paused":
+                    ok, _ = resume_member(user_id)
+                    if ok:
+                        reply_message(reply_token,
+                            "✅ 每日浪況推播已恢復！\n\n"
+                            "每天 05:00（早報）和 15:00（下午快報）都會收到最新浪況 🌊\n"
+                            "需要暫停時輸入「暫停推播」即可。")
+                    else:
+                        reply_message(reply_token, "⚠️ 恢復失敗，請稍後再試。")
+                else:
+                    reply_message(reply_token,
+                        "你目前不在訂閱名單中 🤔\n"
+                        "重新加好友即可自動加入每日推播！")
 
             # 指令總覽
             elif any(k in msg_text for k in ["help", "Help", "HELP", "指令", "說明", "功能"]):

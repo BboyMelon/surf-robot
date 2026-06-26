@@ -3,6 +3,7 @@
 有設定 SUPABASE_URL + SUPABASE_KEY → 用雲端；否則用 surf_bot.db。
 """
 import sqlite3
+from datetime import datetime, timezone
 from typing import Tuple, List, Optional
 from config import SUPABASE_URL, SUPABASE_KEY
 
@@ -52,6 +53,18 @@ def init_sqlite():
         c.execute("ALTER TABLE profiles ADD COLUMN nickname TEXT")
     except sqlite3.OperationalError:
         pass  # 舊版資料庫已有此欄位
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS alerts_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_type TEXT NOT NULL,
+            alert_key  TEXT NOT NULL,
+            alerted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_alerts_log_type_key
+        ON alerts_log (alert_type, alert_key)
+    """)
     conn.commit()
     conn.close()
 
@@ -99,6 +112,47 @@ def get_all_members() -> List[dict]:
     rows = conn.execute("SELECT * FROM members WHERE status='active'").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+def get_member_status(line_id: str) -> Optional[str]:
+    """回傳個人訂閱狀態（'active'/'paused'/'inactive'），找不到回傳 None。"""
+    try:
+        if USE_SUPABASE:
+            res = _sb.table("members").select("status").eq("line_id", line_id).execute()
+            return res.data[0]["status"] if res.data else None
+        conn = sqlite3.connect(SQLITE_PATH)
+        row = conn.execute("SELECT status FROM members WHERE line_id=?", (line_id,)).fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+def pause_member(line_id: str) -> Tuple[bool, str]:
+    """暫停個人推播（status='paused'，保留記錄）。"""
+    try:
+        if USE_SUPABASE:
+            _sb.table("members").update({"status": "paused"}).eq("line_id", line_id).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute("UPDATE members SET status='paused' WHERE line_id=?", (line_id,))
+            conn.commit()
+            conn.close()
+        return True, "已暫停"
+    except Exception as e:
+        return False, str(e)
+
+def resume_member(line_id: str) -> Tuple[bool, str]:
+    """恢復個人推播（status='active'）。"""
+    try:
+        if USE_SUPABASE:
+            _sb.table("members").update({"status": "active"}).eq("line_id", line_id).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute("UPDATE members SET status='active' WHERE line_id=?", (line_id,))
+            conn.commit()
+            conn.close()
+        return True, "已恢復"
+    except Exception as e:
+        return False, str(e)
 
 # ── 群組訂閱 ──────────────────────────────────────────────────
 def add_group(group_id: str) -> Tuple[bool, str]:
@@ -233,3 +287,80 @@ def get_all_profiles() -> List[dict]:
         return [dict(r) for r in rows]
     except Exception:
         return []
+
+# ── 警戒 de-dup log ────────────────────────────────────────────
+def log_alert(alert_type: str, alert_key: str) -> None:
+    """記錄一筆警戒推播（swell/typhoon + 識別 key），供跨重啟的 de-dup 使用。"""
+    try:
+        if USE_SUPABASE:
+            _sb.table("alerts_log").insert({"alert_type": alert_type, "alert_key": alert_key}).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute(
+                "INSERT INTO alerts_log (alert_type, alert_key) VALUES (?, ?)",
+                (alert_type, alert_key)
+            )
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"[log_alert 失敗] {e}")
+
+
+def get_last_alert_time(alert_type: str, alert_key: str) -> Optional[datetime]:
+    """回傳最近一次警戒推播時間（timezone-aware），查無記錄回傳 None。"""
+    try:
+        if USE_SUPABASE:
+            res = (
+                _sb.table("alerts_log")
+                .select("alerted_at")
+                .eq("alert_type", alert_type)
+                .eq("alert_key", alert_key)
+                .order("alerted_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not res.data:
+                return None
+            dt = datetime.fromisoformat(res.data[0]["alerted_at"])
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            row = conn.execute(
+                "SELECT alerted_at FROM alerts_log WHERE alert_type=? AND alert_key=? ORDER BY alerted_at DESC LIMIT 1",
+                (alert_type, alert_key)
+            ).fetchone()
+            conn.close()
+            if not row:
+                return None
+            dt = datetime.fromisoformat(row[0])
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception as e:
+        print(f"[get_last_alert_time 失敗] {e}")
+        return None
+
+
+def has_alert_logged(alert_type: str, alert_key: str) -> bool:
+    """颱風 de-dup：查詢某颱風 ID 是否曾推播過（跨 Render 重啟也有效）。
+    查詢失敗時回傳 False（保守處理：允許推播，不重複壓制）。"""
+    try:
+        if USE_SUPABASE:
+            res = (
+                _sb.table("alerts_log")
+                .select("id")
+                .eq("alert_type", alert_type)
+                .eq("alert_key", alert_key)
+                .limit(1)
+                .execute()
+            )
+            return bool(res.data)
+        conn = sqlite3.connect(SQLITE_PATH)
+        row = conn.execute(
+            "SELECT 1 FROM alerts_log WHERE alert_type=? AND alert_key=?",
+            (alert_type, alert_key)
+        ).fetchone()
+        conn.close()
+        return row is not None
+    except Exception as e:
+        print(f"[has_alert_logged 失敗] {e}")
+        return False

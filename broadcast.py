@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
 from config import SURF_SPOTS_CONFIG, CWA_API_KEY, get_surf_level
-from db import get_all_members, get_all_groups, get_all_profiles
+from db import get_all_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time, has_alert_logged
 from line_api import push_text as push_line_message
 
 # CWA 開放資料平台的證書鏈缺少 Subject Key Identifier 欄位。Render 上的 Python
@@ -28,17 +28,23 @@ from line_api import push_text as push_line_message
 # Python ssl 模組底層，比任何 requests/urllib3 層級的設定都早。改用 curl
 # 子行程（-k 跳過憑證驗證），curl 走自己的 TLS 驗證邏輯，不會踩到同一個問題。
 # CWA 是公開氣象資料，沒有敏感資料外洩風險。
-def _cwa_get(url: str, params: dict = None, timeout: int = 10) -> dict:
+def _cwa_get(url: str, params: dict = None, timeout: int = 10, retries: int = 3) -> dict:
     if params:
         from urllib.parse import urlencode
         url = f"{url}?{urlencode(params)}"
-    result = subprocess.run(
-        ["curl", "-sk", "--max-time", str(timeout), url],
-        capture_output=True, text=True, timeout=timeout + 5,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"curl 失敗（code {result.returncode}）：{result.stderr.strip()}")
-    return _json.loads(result.stdout)
+    last_err = ""
+    for attempt in range(1, retries + 1):
+        result = subprocess.run(
+            ["curl", "-sk", "--max-time", str(timeout), url],
+            capture_output=True, text=True, timeout=timeout + 5,
+        )
+        if result.returncode == 0:
+            return _json.loads(result.stdout)
+        last_err = f"curl 失敗（code {result.returncode}）：{result.stderr.strip()}"
+        if attempt < retries:
+            print(f"  [_cwa_get] 第 {attempt} 次失敗，2 秒後重試...")
+            time.sleep(2)
+    raise RuntimeError(last_err)
 
 
 CWA_MARINE_URL = (
@@ -944,10 +950,6 @@ SWELL_HEIGHT_THRESHOLD = 1.5   # m，超過才觸發
 SWELL_PERIOD_THRESHOLD = 8.0   # s，超過才觸發
 SWELL_ALERT_COOLDOWN   = 6     # 同一站至少間隔幾小時才再推
 
-# 內存 de-dup 狀態（Render 重啟後重置，可接受）
-_last_swell_alert: dict = {}   # {station_id: datetime}
-_alerted_typhoon_ids: set = set()
-
 CWA_TYPHOON_URL = (
     "https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0034-005"
     f"?Authorization={CWA_API_KEY}&format=JSON"
@@ -1002,7 +1004,7 @@ def check_swell_alerts():
         print("  ⚠️ 無法取得浮標資料，跳過")
         return
 
-    # 以浮標站為單位，收集超標浪點
+    # 以浮標站為單位，收集超標浪點（de-dup 存 Supabase，Render 重啟後仍有效）
     triggered: dict = {}  # {station_id: [(spot_name, wh, wp), ...]}
 
     for spot_name, spot_cfg in SURF_SPOTS_CONFIG.items():
@@ -1012,7 +1014,7 @@ def check_swell_alerts():
         wp   = data.get("wave_period", 0.0)
 
         if wh >= SWELL_HEIGHT_THRESHOLD and wp >= SWELL_PERIOD_THRESHOLD:
-            last = _last_swell_alert.get(sid)
+            last = get_last_alert_time("swell", sid)
             if last is None or (now - last).total_seconds() > SWELL_ALERT_COOLDOWN * 3600:
                 triggered.setdefault(sid, []).append((spot_name, wh, wp))
 
@@ -1021,7 +1023,7 @@ def check_swell_alerts():
         return
 
     for sid in triggered:
-        _last_swell_alert[sid] = now
+        log_alert("swell", sid)
 
     lines = [
         "🚨 長浪警戒通知 🚨",
@@ -1084,7 +1086,7 @@ def check_typhoon_alerts():
             ty_name_eng = ty.get("TyphoonName", "")
             warn_level  = "颱風" if ty.get("CwaTyNo") else "熱帶性低氣壓"
 
-            if not ty_id or ty_id in _alerted_typhoon_ids:
+            if not ty_id or has_alert_logged("typhoon", ty_id):
                 continue
 
             # 取最新實況座標（AnalysisData.Fix 最後一筆）
@@ -1103,7 +1105,7 @@ def check_typhoon_alerts():
                 print(f"  ℹ️ {ty_name}（{ty_id}）距台灣 {dist_km:.0f} km，超過 {TYPHOON_ALERT_KM} km 門檻，略過")
                 continue
 
-            _alerted_typhoon_ids.add(ty_id)
+            log_alert("typhoon", ty_id)
 
             lines = [
                 "🌀 熱帶氣旋通知 🌀",
