@@ -432,8 +432,32 @@ def get_marine_data() -> dict:
 
 # ── Swell Eye：湧浪能量 ───────────────────────────────────
 def swell_energy(wave_height: float, period: float) -> float:
-    """湧浪能量 = 浪高(m) × 週期(s)"""
+    """湧浪能量 = 浪高(m) × 週期(s)（原始值，用於顯示）"""
     return round(wave_height * period, 2)
+
+
+def period_quality_factor(period: float) -> float:
+    """
+    週期品質加權係數。
+    短週期風浪（Wind swell）雜亂打板，長週期湧浪（Ground swell）乾淨有力，
+    相同浪高下品質差距極大。
+      < 7s  → 0.7  （短週期風浪，雜亂）
+      7-9s  → 1.0  （一般）
+      9-12s → 1.3  （長週期混合浪）
+     ≥ 12s  → 1.6  （Ground swell，最佳品質）
+    """
+    if period >= 12:
+        return 1.6
+    if period >= 9:
+        return 1.3
+    if period >= 7:
+        return 1.0
+    return 0.7
+
+
+def swell_quality_score(wave_h: float, period: float) -> float:
+    """排序/星數用品質分數 = 能量 × 週期品質係數"""
+    return swell_energy(wave_h, period) * period_quality_factor(period)
 
 
 # ── 陸風判斷 ─────────────────────────────────────────────
@@ -452,18 +476,18 @@ def ms_to_beaufort(ms: float) -> int:
 
 
 def surf_stars(wave_h: float, period: float, offshore: bool) -> str:
-    """依湧浪能量 + 陸風回傳星數字串（1–5 顆）。"""
+    """依品質分數（能量×週期係數）+ 陸風回傳星數字串（1–5 顆）。"""
     level = get_surf_level(wave_h, period)
     if level["emoji"] == "⛔":
         return "🚫"
-    energy = swell_energy(wave_h, period)
-    if energy < 3:
+    score = swell_quality_score(wave_h, period)
+    if score < 3:
         stars = 1
-    elif energy < 6:
+    elif score < 5:
         stars = 2
-    elif energy < 12:
+    elif score < 10:
         stars = 3
-    elif energy < 20:
+    elif score < 18:
         stars = 4
     else:
         stars = 5
@@ -565,7 +589,7 @@ def find_best_spots(marine: dict, top_n: int = 3) -> list:
         seen_stations.add(sid)
         offshore = is_offshore(wind_dir, spot_cfg["offshore_wind"])
         energy   = swell_energy(wave_h, period)
-        score    = energy * (1.3 if offshore else 1.0)  # 陸風加成 30%
+        score    = swell_quality_score(wave_h, period) * (1.3 if offshore else 1.0)
 
         scored.append({
             "name":     spot_name,

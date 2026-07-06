@@ -126,8 +126,18 @@ SURF_LEVEL = [
 ]
 
 def get_surf_level(wave_height: float, wave_period: float) -> dict:
-    """依照 GoOcean 官方標準回傳分級結果。"""
-    for level in SURF_LEVEL:
-        if wave_height < level["max_height"] and wave_period < level["max_period"]:
-            return level
-    return SURF_LEVEL[-1]
+    """
+    依照 GoOcean 分級回傳等級結果。
+    主要依浪高判斷，長週期湧浪（ground swell）另外調升一個等級：
+      ⛔ 危險：浪高 ≥ 3m，或浪高 ≥ 2m 且週期 ≥ 12s（大浪強湧浪）
+      🔴 進階：浪高 ≥ 1.8m，或浪高 ≥ 1.0m 且週期 ≥ 12s（中浪長湧浪，能量大）
+      🟡 中階：浪高 ≥ 0.8m，或浪高 ≥ 0.5m 且週期 ≥ 9s
+      🟢 初學：其餘
+    """
+    if wave_height >= 3.0 or (wave_height >= 2.0 and wave_period >= 12):
+        return SURF_LEVEL[3]  # ⛔
+    if wave_height >= 1.8 or (wave_height >= 1.0 and wave_period >= 12):
+        return SURF_LEVEL[2]  # 🔴
+    if wave_height >= 0.8 or (wave_height >= 0.5 and wave_period >= 9):
+        return SURF_LEVEL[1]  # 🟡
+    return SURF_LEVEL[0]     # 🟢
