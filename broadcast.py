@@ -399,18 +399,35 @@ def build_tide_line(tide: dict) -> str:
     return "\n".join(lines)
 
 
-# ── 資料取得入口（CWA 優先，失敗改用 Open-Meteo，最多 retry 2 次）──
+# ── 資料取得入口（CWA 優先，缺失站用 Open-Meteo 補充）──────
 def get_marine_data() -> dict:
-    """優先用 CWA 浮標資料；失敗自動切換 Open-Meteo，並 retry 2 次。"""
-    data = fetch_marine_data()
-    if not data:
-        print("[資料切換] CWA 無回應，改用 Open-Meteo Marine API")
+    """
+    優先用 CWA 浮標資料。
+    - CWA 完全空白 → 全切 Open-Meteo（retry 2 次）
+    - CWA 部分缺站 → 用 Open-Meteo 補充缺失的站，避免顯示「暫無觀測資料」
+    """
+    cwa_data = fetch_marine_data()
+
+    if not cwa_data:
+        # CWA 全部無效（全過期 or API 錯誤）→ 完整切換 Open-Meteo
+        print("[資料切換] CWA 全部無效，改用 Open-Meteo Marine API")
         for attempt in range(1, 3):
-            data = fetch_marine_data_openmeteo()
-            if data:
-                break
+            om = fetch_marine_data_openmeteo()
+            if om:
+                return om
             print(f"[Open-Meteo] 第 {attempt} 次重試失敗，再試一次...")
-    return data
+        return {}
+
+    missing = set(STATION_COORDS.keys()) - set(cwa_data.keys())
+    if missing:
+        # CWA 部分站缺失 → 從 Open-Meteo 補充，避免浪點顯示「暫無觀測資料」
+        print(f"[資料補充] CWA 缺少 {len(missing)} 站，向 Open-Meteo 補充：{', '.join(sorted(missing))}")
+        om = fetch_marine_data_openmeteo()
+        for sid in missing:
+            if sid in om:
+                cwa_data[sid] = om[sid]
+
+    return cwa_data
 
 
 # ── Swell Eye：湧浪能量 ───────────────────────────────────
