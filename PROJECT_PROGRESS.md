@@ -149,20 +149,16 @@ surf_robot/
 ## 待辦清單
 
 ### 下一步
-- [ ] **等 Render 帳單週期重置**（或評估升級方案）：2026-06-24 因免費額度用盡被暫停，需到 Render Dashboard → Settings → Billing 確認重置日期，恢復前 webhook/廣播/警戒全部不會動
+- [x] **Render 帳單週期重置**（2026-07-06 確認恢復，health check 200）：但 Render 恢復後跑的是舊版（June 24 之前最後一次成功部署），June 25-26 的 commits（9aa5380/24d9edf/dad463f/ee6cdb4/dd382d2）未被部署 → 觸發「北部暫無觀測資料」bug（舊版無 MARINE_DATA_MAX_AGE_HOURS 新鮮度檢查，CWA 部分站缺資料時不觸發 Open-Meteo 備援）。2026-07-06 補推 commit 重新觸發 deploy.yml，完整部署所有 June 25-26 修復
 - [ ] **今日最佳浪點推薦擴充**：目前已有基本版（`find_best_spots()`），可再優化排序權重
-- [x] **重複邏輯整併** ✅（2026-06-22 完成。抽出共用函式 `build_spot_block()`，`build_report()`/`build_personal_report()`/`build_instant_report()` 三處改呼叫同一個函式，淨減少約 44 行；順手移除死變數 `wave_dir` 跟 webhook.py 5 個變多餘的 import）
 
-### 低優先
-- [x] **`broadcast()` N+1 查詢** ✅（2026-06-25 完成。改用 `get_all_profiles()` 批次查詢後查表，取代每位訂閱者各打一次 `get_profile()`）
-- [x] **LINE Push/Reply 重複邏輯** ✅（2026-06-25 完成。新增 `line_api.py` 統一 push/reply 呼叫，`webhook.py`/`broadcast.py` 改成 import 共用函式，原本各自的重複實作已移除）
-- [x] **Webhook 改非同步處理** ✅（2026-06-25 完成。`/webhook` 路由先回 200，事件處理丟進背景執行緒 `_process_events()`，避免同步打 CWA/Open-Meteo 太慢導致 LINE 重送事件造成重複處理。已用 Flask test client 驗證：回應時間從數秒降到 3ms 內）
-- [x] **reply 狀態檢查不一致** ✅（隨 line_api.py 整併一併解決，三個函式現在都經過同一個 `_post()` 統一檢查狀態碼+記 log）
-- [ ] 訂閱開關（用戶自助暫停/恢復）
-- [ ] 警戒 de-dup 持久化（目前存在記憶體，Render 重啟後重置，可考慮存 Supabase `alerts_log` 表）
-- [x] LINE_CHANNEL_SECRET 金鑰輪替 ✅（2026-06-22 完成，LINE Console 重新產生 + Render/本機 .env 同步更新，傳訊息測試正常）
-- [x] CWA_API_KEY 金鑰輪替 ✅（2026-06-22 完成）
-- [x] **CWA API 在 Render 上 SSL 連線失敗** ✅（2026-06-22 修復。根因：CWA 證書鏈缺少 Subject Key Identifier 欄位，本機 OpenSSL 不檢查、Render 的 OpenSSL 3.2+ 嚴格模式會直接拒絕，跟金鑰本身無關。試過 `verify=False`、自訂 SSLContext 清嚴格旗標都沒用，最後改用 `subprocess` 呼叫系統 `curl -sk` 取代 `requests` 才解決。詳細踩坑記錄在 line-bot-builder skill 第17條）
+### 已完成功能（按主題彙總）
+- ✅ 核心推播、查詢、Surfer 檔案、後台、圖文選單（見上方「已完成功能」章節）
+- ✅ **2026-06-26 三項優化 + try/except（ee6cdb4、dd382d2）**
+  - `_cwa_get()` 加 retries=3，curl 失敗 2 秒後重試
+  - 警戒 de-dup 改存 Supabase `alerts_log` 表（Render 重啟不再重置）
+  - 訂閱開關：`暫停推播` / `恢復推播` 指令，members.status 新增 'paused'
+  - `_process_events()` for 迴圈加 try/except 隔離，單 event 例外不中斷整批
 
 ### 未來功能（暫緩）
 - [ ] 影片連結投稿：浪友傳 `📹 烏石港 https://...`，存 `surf_videos` 表，廣播附「今日影片」
