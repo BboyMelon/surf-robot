@@ -15,6 +15,7 @@ from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status
 from line_api import (
     push_text as push_message,
+    push_flex,
     reply_text as reply_message,
     reply_flex,
     get_display_name as get_line_display_name,
@@ -485,23 +486,30 @@ def _process_events(events: list) -> None:
                         display_name = get_line_display_name(user_id)
                         update_display_name(user_id, display_name)
 
-                # ── 圖文選單觸發 ──────────────────────────────────
+                # ── 圖文選單觸發（reply 失敗時用 push 備援，防止部署重啟空窗期 token 過期）──
                 if "🔍 即時浪況查詢" in msg_text:
-                    reply_message(reply_token, SPOT_QUERY_HINT)
+                    if not reply_message(reply_token, SPOT_QUERY_HINT) and user_id:
+                        push_message(user_id, SPOT_QUERY_HINT)
 
                 elif "📝 Surfer 檔案建立" in msg_text:
-                    reply_message(reply_token, PROFILE_FORM)
+                    if not reply_message(reply_token, PROFILE_FORM) and user_id:
+                        push_message(user_id, PROFILE_FORM)
 
                 elif "📚 專業海象觀測網" in msg_text:
-                    reply_flex(reply_token, build_ocean_links_flex())
+                    flex = build_ocean_links_flex()
+                    if not reply_flex(reply_token, flex) and user_id:
+                        push_flex(user_id, flex)
 
                 elif "🗺️ Windy 動態地圖" in msg_text:
-                    reply_message(reply_token,
-                        "🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\nhttps://www.windy.com/?waves,23.8,121.8,6")
+                    windy_msg = "🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\nhttps://www.windy.com/?waves,23.8,121.8,6"
+                    if not reply_message(reply_token, windy_msg) and user_id:
+                        push_message(user_id, windy_msg)
 
                 # 訂閱表單邀請
                 elif any(k in msg_text for k in ["訂閱", "立即訂閱", "加入訂閱", "訂閱表單"]):
-                    reply_flex(reply_token, build_subscribe_flex())
+                    flex = build_subscribe_flex()
+                    if not reply_flex(reply_token, flex) and user_id:
+                        push_flex(user_id, flex)
 
                 # 查詢自己名稱
                 elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):

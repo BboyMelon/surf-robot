@@ -44,6 +44,13 @@ def reply_flex(reply_token: str, flex: dict) -> bool:
     )
 
 
+def push_flex(to: str, flex: dict) -> bool:
+    return _post(
+        "https://api.line.me/v2/bot/message/push",
+        {"to": to, "messages": [flex]},
+    )
+
+
 def get_display_name(user_id: str) -> str:
     url = f"https://api.line.me/v2/bot/profile/{user_id}"
     headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
