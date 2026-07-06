@@ -242,73 +242,78 @@ PROFILE_FORM = """📝 填寫小資料，解鎖客製化浪況建議！
 建立後每日 05:00 推送專屬浪況早報 🌊
 💡 已建立過檔案的話，請在開頭加上「修改」二字再重新填寫，才能更新資料喔！"""
 
-# ── 圖文選單：專業海象觀測網 Flex Message ─────────────────
-def build_ocean_links_flex() -> dict:
+# ── 圖文選單：浪況數據與直播資源 Flex Carousel ─────────────
+def _uri_btn(label: str, uri: str, color: str, height: str = "md") -> dict:
+    return {
+        "type": "button", "style": "primary", "color": color, "height": height,
+        "action": {"type": "uri", "label": label, "uri": uri},
+    }
+
+
+def build_resources_flex() -> dict:
+    def _hdr(text: str, bg: str) -> dict:
+        return {
+            "type": "box", "layout": "vertical",
+            "backgroundColor": bg, "paddingAll": "12px",
+            "contents": [{"type": "text", "text": text,
+                          "color": "#ffffff", "weight": "bold", "size": "lg"}],
+        }
+
+    def _body(btns: list) -> dict:
+        return {"type": "box", "layout": "vertical", "spacing": "sm", "contents": btns}
+
+    b1 = {
+        "type": "bubble",
+        "header": _hdr("📊 海象觀測資源", "#0D4F8C"),
+        "body": _body([
+            _uri_btn("🌊 中央氣象署 CWA 海象資訊", "https://ocean.cwb.gov.tw/", "#1a5fa8"),
+            _uri_btn("🔬 國家海洋研究院 NODASS", "https://nodass.namr.gov.tw/", "#0A6B5E"),
+            _uri_btn("🏄 Swell Eye 衝浪科學", "https://www.surf-forecast.com/", "#C45D00"),
+            _uri_btn("🗺️ Windy 動態地圖", "https://www.windy.com/?waves,23.8,121.8,6", "#3D1A70"),
+        ]),
+    }
+
+    b2 = {
+        "type": "bubble",
+        "header": _hdr("🔴 北部浪況直播", "#9B1515"),
+        "body": _body([
+            _uri_btn("▶ 中角灣", "https://www.youtube.com/watch?v=iJphhU-iaTA", "#CC0000", "sm"),
+            _uri_btn("▶ 中角灣（國海院）", "https://www.youtube.com/watch?v=Jpg_V7f7rW8", "#CC0000", "sm"),
+            _uri_btn("▶ 白沙灣", "https://www.youtube.com/watch?v=FbB8WDUXXqU", "#CC0000", "sm"),
+            _uri_btn("▶ 外澳沙灘", "https://www.youtube.com/watch?v=UgoT-QTbYvo", "#CC0000", "sm"),
+            _uri_btn("▶ 福隆海水浴場", "https://www.youtube.com/watch?v=Rhkr8qJOFO4", "#CC0000", "sm"),
+            _uri_btn("▶ 福隆（國海院）", "https://www.youtube.com/watch?v=Yhj5qvupJDk", "#CC0000", "sm"),
+            _uri_btn("▶ 無尾港", "https://www.youtube.com/watch?v=7S0lZRj9ViY", "#CC0000", "sm"),
+        ]),
+    }
+
+    b3 = {
+        "type": "bubble",
+        "header": _hdr("🔴 東部浪況直播", "#0A5E50"),
+        "body": _body([
+            _uri_btn("▶ 金樽", "https://www.youtube.com/watch?v=q3KJt-SZc2s", "#0A7A6E", "sm"),
+            _uri_btn("▶ 金樽休憩中心", "https://www.youtube.com/watch?v=ZdqHgQwvZOw", "#0A7A6E", "sm"),
+            _uri_btn("▶ 都歷遊客中心", "https://www.youtube.com/watch?v=JhQuR77AR7U", "#0A7A6E", "sm"),
+            _uri_btn("▶ 杉原灣海灘", "https://www.youtube.com/watch?v=VqS_Y8ZCj6M", "#0A7A6E", "sm"),
+        ]),
+    }
+
+    b4 = {
+        "type": "bubble",
+        "header": _hdr("🔴 南部浪況直播", "#B84D00"),
+        "body": _body([
+            _uri_btn("▶ 旗津海灘", "https://www.youtube.com/watch?v=ka7FV0sCvxQ", "#CC5500", "sm"),
+            _uri_btn("▶ 旗津海灘（國海院）", "https://www.youtube.com/watch?v=An0oUZBZtG0", "#CC5500", "sm"),
+            _uri_btn("▶ 南灣", "https://www.youtube.com/watch?v=jUnFuJSj0OU", "#CC5500", "sm"),
+            _uri_btn("▶ 佳樂水", "https://www.youtube.com/watch?v=35ov7d8zLyE", "#CC5500", "sm"),
+            _uri_btn("▶ 佳樂水（國海院）", "https://www.youtube.com/watch?v=8bn_-PbneiI", "#CC5500", "sm"),
+        ]),
+    }
+
     return {
         "type": "flex",
-        "altText": "📚 專業海象觀測網",
-        "contents": {
-            "type": "bubble",
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#0D4F8C",
-                "contents": [{
-                    "type": "text",
-                    "text": "🌊 精選海象觀測資源",
-                    "color": "#ffffff",
-                    "weight": "bold",
-                    "size": "lg",
-                }],
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "sm",
-                "contents": [
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#1a5fa8",
-                        "action": {
-                            "type": "uri",
-                            "label": "🌊 中央氣象署 CWA 海象資訊",
-                            "uri": "https://ocean.cwb.gov.tw/",
-                        },
-                    },
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#0A6B5E",
-                        "action": {
-                            "type": "uri",
-                            "label": "🔬 國家海洋研究院 NODASS",
-                            "uri": "https://nodass.namr.gov.tw/",
-                        },
-                    },
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#C45D00",
-                        "action": {
-                            "type": "uri",
-                            "label": "🏄 Swell Eye 衝浪科學",
-                            "uri": "https://www.surf-forecast.com/",
-                        },
-                    },
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#3D1A70",
-                        "action": {
-                            "type": "uri",
-                            "label": "🗺️ Windy 動態地圖",
-                            "uri": "https://www.windy.com/?waves,23.8,121.8,6",
-                        },
-                    },
-                ],
-            },
-        },
+        "altText": "📺 浪況數據與直播資源",
+        "contents": {"type": "carousel", "contents": [b1, b2, b3, b4]},
     }
 
 # ── 圖文選單：訂閱表單邀請 Flex Message ─────────────────────
@@ -495,8 +500,8 @@ def _process_events(events: list) -> None:
                     if not reply_message(reply_token, PROFILE_FORM) and user_id:
                         push_message(user_id, PROFILE_FORM)
 
-                elif "📚 專業海象觀測網" in msg_text:
-                    flex = build_ocean_links_flex()
+                elif "📺 浪況數據與直播資源" in msg_text or "📚 專業海象觀測網" in msg_text:
+                    flex = build_resources_flex()
                     if not reply_flex(reply_token, flex) and user_id:
                         push_flex(user_id, flex)
 
