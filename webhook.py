@@ -637,14 +637,13 @@ def _process_events(events: list) -> None:
             print(f"[_process_events 錯誤] event={event.get('type')} err={e}")
 
 
-# ── 背景排程執行緒（Render 上唯一跑排程的地方）──────────────
+# ── 背景排程執行緒 ──────────────
+# 每日廣播改由 broadcast.yml（GitHub Actions）主動喚醒 Render 後呼叫 /broadcast-now 觸發，
+# 不在這裡排程，避免 Render 剛好醒著時內部排程跟 GitHub Actions 各觸發一次、重複推播。
 def _run_scheduler():
-    # Render 伺服器跑 UTC；台灣 05:00 = UTC 21:00，台灣 15:00 = UTC 07:00
-    schedule.every().day.at("21:00").do(broadcast)
-    schedule.every().day.at("07:00").do(broadcast)
     schedule.every(3).hours.do(check_swell_alerts)
     schedule.every(1).hours.do(check_typhoon_alerts)
-    print("🕐 排程啟動：台灣 05:00(UTC 21:00) + 15:00(UTC 07:00) 廣播 / 每 3h 長浪警戒 / 每 1h 颱風警報")
+    print("🕐 排程啟動：每 3h 長浪警戒 / 每 1h 颱風警報（廣播由 broadcast.yml 觸發）")
     while True:
         schedule.run_pending()
         time.sleep(60)
