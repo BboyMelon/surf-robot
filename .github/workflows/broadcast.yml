@@ -2,8 +2,7 @@ name: Daily Broadcast Trigger
 
 on:
   schedule:
-    - cron: '0 21 * * *'  # 台灣時間 05:00 (UTC 21:00)
-    - cron: '0 7 * * *'   # 台灣時間 15:00 (UTC 07:00)
+    - cron: '0 21 * * *'  # 台灣時間 05:00 (UTC 21:00)，唯一的每日廣播
   workflow_dispatch:        # 允許手動觸發測試
 
 jobs:
