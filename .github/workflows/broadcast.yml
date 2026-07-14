@@ -15,7 +15,7 @@ jobs:
           echo "⏳ 等待 Render 服務喚醒..."
           for i in $(seq 1 12); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              https://surf-robot.onrender.com/health --max-time 15)
+              https://surf-robot.onrender.com/health --max-time 15 || echo "000")
             echo "  /health 嘗試 $i/12：HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "✅ 服務已就緒"
@@ -31,7 +31,7 @@ jobs:
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
               https://surf-robot.onrender.com/broadcast-now \
               -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" \
-              --max-time 30)
+              --max-time 30 || echo "000")
             echo "  嘗試 $i/3：HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "✅ 廣播觸發成功"
