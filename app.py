@@ -91,7 +91,7 @@ with col_left:
         elif not line_id.startswith("U"):
             st.warning("LINE User ID 通常以大寫 U 開頭，請確認")
         else:
-            ok, msg = add_member(email.strip(), line_id.strip())
+            ok, msg = add_member(email.strip(), line_id.strip(), form_completed=True)
             if ok:
                 st.success(f"✅ {msg} 明天早上見！")
                 st.balloons()

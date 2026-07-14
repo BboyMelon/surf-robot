@@ -21,13 +21,18 @@ def init_sqlite():
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS members (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            email      TEXT,
-            line_id    TEXT UNIQUE,
-            status     TEXT DEFAULT 'active',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email           TEXT,
+            line_id         TEXT UNIQUE,
+            status          TEXT DEFAULT 'active',
+            form_completed  BOOLEAN DEFAULT 0,
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    try:
+        c.execute("ALTER TABLE members ADD COLUMN form_completed BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # 舊版資料庫已有此欄位
     c.execute("""
         CREATE TABLE IF NOT EXISTS groups (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,22 +77,43 @@ if not USE_SUPABASE:
     init_sqlite()
 
 # ── 個人訂閱 ──────────────────────────────────────────────────
-def add_member(email: str, line_id: str) -> Tuple[bool, str]:
+def add_member(email: str, line_id: str, form_completed: bool = False) -> Tuple[bool, str]:
+    """
+    新增/更新訂閱者。form_completed 預設 False（例如單純加好友觸發的 follow 事件）；
+    Streamlit 訂閱表單送出成功時應傳入 form_completed=True，代表正式完成會員註冊，
+    05:00 每日廣播只會推播給 form_completed=True 的會員。
+    """
     try:
         if USE_SUPABASE:
-            _sb.table("members").upsert(
-                {"email": email, "line_id": line_id, "status": "active"},
-                on_conflict="line_id"
-            ).execute()
+            payload = {"email": email, "line_id": line_id, "status": "active"}
+            if form_completed:
+                # 只在 True 時才寫入該欄位，避免加好友事件（預設 False）
+                # 在已完成表單的會員身上，把 form_completed 又覆寫回 False
+                payload["form_completed"] = True
+            _sb.table("members").upsert(payload, on_conflict="line_id").execute()
         else:
             conn = sqlite3.connect(SQLITE_PATH)
             conn.execute(
-                "INSERT OR REPLACE INTO members (email, line_id, status) VALUES (?,?,?)",
-                (email, line_id, "active")
+                "INSERT OR REPLACE INTO members (email, line_id, status, form_completed) VALUES (?,?,?,?)",
+                (email, line_id, "active", form_completed)
             )
             conn.commit()
             conn.close()
         return True, "訂閱成功！"
+    except Exception as e:
+        return False, str(e)
+
+def set_form_completed(line_id: str, completed: bool = True) -> Tuple[bool, str]:
+    """手動標記某會員是否完成註冊表單（影響是否收到 05:00 每日廣播）。"""
+    try:
+        if USE_SUPABASE:
+            _sb.table("members").update({"form_completed": completed}).eq("line_id", line_id).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute("UPDATE members SET form_completed=? WHERE line_id=?", (completed, line_id))
+            conn.commit()
+            conn.close()
+        return True, "已更新"
     except Exception as e:
         return False, str(e)
 
@@ -110,6 +136,17 @@ def get_all_members() -> List[dict]:
     conn = sqlite3.connect(SQLITE_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM members WHERE status='active'").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_broadcast_members() -> List[dict]:
+    """05:00 每日廣播的收件名單：active 且 form_completed=True（正式完成註冊的會員）。"""
+    if USE_SUPABASE:
+        res = _sb.table("members").select("*").eq("status", "active").eq("form_completed", True).execute()
+        return res.data
+    conn = sqlite3.connect(SQLITE_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM members WHERE status='active' AND form_completed=1").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

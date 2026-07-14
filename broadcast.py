@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
 from config import SURF_SPOTS_CONFIG, CWA_API_KEY, get_surf_level
-from db import get_all_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time, has_alert_logged
+from db import get_all_members, get_broadcast_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time, has_alert_logged
 from line_api import push_text as push_line_message
 
 # CWA 開放資料平台的證書鏈缺少 Subject Key Identifier 欄位。Render 上的 Python
@@ -900,7 +900,7 @@ def broadcast():
     print(generic_report)
     print("──────────────────────────────")
 
-    members  = get_all_members()
+    members  = get_broadcast_members()  # 只推給完成註冊表單的會員，非全部 active 訂閱者
     groups   = get_all_groups()
     profiles = {p["line_id"]: p for p in get_all_profiles()}  # 一次批次查，避免每位訂閱者各打一次DB
     ok, fail = 0, 0
