@@ -11,6 +11,7 @@ SUPABASE_URL            = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY            = os.getenv("SUPABASE_KEY", "")
 
 ADMIN_PASSWORD   = "surf123"
+ADMIN_LINE_ID    = os.getenv("ADMIN_LINE_ID", "Ubbf53a642514770a3f153b40fcd34a4c")
 BROADCAST_TOKEN  = os.getenv("BROADCAST_TOKEN", "surf-broadcast-2026")
 STREAMLIT_URL    = os.getenv("STREAMLIT_URL", "（尚未部署，敬請期待 🚀）")
 

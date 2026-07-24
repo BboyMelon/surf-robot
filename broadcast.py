@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
-from config import SURF_SPOTS_CONFIG, CWA_API_KEY, get_surf_level
+from config import SURF_SPOTS_CONFIG, CWA_API_KEY, ADMIN_LINE_ID, get_surf_level
 from db import get_all_members, get_broadcast_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time, has_alert_logged
 from line_api import push_text as push_line_message
 
@@ -224,7 +224,7 @@ def fetch_marine_data_openmeteo() -> dict:
                 "current": "wave_height,wave_period,wave_direction",
                 "timezone": "Asia/Taipei",
             },
-            timeout=8,
+            timeout=15,
         )
         marine_resp.raise_for_status()
         marine_data = marine_resp.json()
@@ -238,7 +238,7 @@ def fetch_marine_data_openmeteo() -> dict:
                 "current": "wind_speed_10m,wind_direction_10m",
                 "timezone": "Asia/Taipei",
             },
-            timeout=8,
+            timeout=15,
         )
         wind_resp.raise_for_status()
         wind_data = wind_resp.json()
@@ -415,7 +415,8 @@ def get_marine_data() -> dict:
             om = fetch_marine_data_openmeteo()
             if om:
                 return om
-            print(f"[Open-Meteo] 第 {attempt} 次重試失敗，再試一次...")
+            print(f"[Open-Meteo] 第 {attempt} 次重試失敗，2 秒後再試一次...")
+            time.sleep(2)
         return {}
 
     missing = set(STATION_COORDS.keys()) - set(cwa_data.keys())
@@ -888,6 +889,7 @@ def broadcast():
     marine = get_marine_data()
     if not marine:
         print("  ⚠️ 無法取得浮標資料（CWA + Open-Meteo 均失敗），廣播取消")
+        push_line_message(ADMIN_LINE_ID, "⚠️ 今日浪況廣播取消：CWA + Open-Meteo 浮標資料皆取得失敗，請檢查兩個 API 狀態。")
         return
 
     # 取明日預報（失敗不中斷廣播）
