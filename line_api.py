@@ -61,3 +61,18 @@ def get_display_name(user_id: str) -> str:
     except Exception:
         pass
     return user_id
+
+
+def verify_line_user(user_id: str):
+    """驗證 LINE User ID 是否真實存在且已加機器人好友。
+    回傳 (是否有效, 顯示名稱或None)。404代表ID不存在/未加好友，
+    其他錯誤（逾時等）保守視為無效，避免把不確定的資料寫進資料庫。"""
+    url = f"https://api.line.me/v2/bot/profile/{user_id}"
+    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            return True, resp.json().get("displayName", "")
+    except Exception as e:
+        print(f"[LINE Profile 驗證錯誤] {e}")
+    return False, None

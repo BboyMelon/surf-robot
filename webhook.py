@@ -10,8 +10,8 @@ import threading
 import time
 import schedule
 from datetime import datetime
-from flask import Flask, request, abort
-from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL
+from flask import Flask, request, abort, jsonify
+from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL, TIDELOG_ALLOWED_ORIGINS
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status
 from line_api import (
     push_text as push_message,
@@ -19,6 +19,7 @@ from line_api import (
     reply_text as reply_message,
     reply_flex,
     get_display_name as get_line_display_name,
+    verify_line_user,
 )
 from broadcast import (
     get_marine_data,
@@ -427,6 +428,46 @@ def trigger_broadcast():
     threading.Thread(target=broadcast, daemon=True).start()
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔔 外部廣播觸發成功")
     return "Broadcast triggered", 200
+
+
+# ── tidelog-site 訂閱表單端點（Email選填＋LINE ID必填）───────
+# 瀏覽器預設擋跨網域請求，手動加 Access-Control-Allow-* 標頭放行
+# tidelog-site 網域（不裝 flask-cors 套件，原理更透明）。
+def _add_cors_headers(resp):
+    origin = request.headers.get("Origin", "")
+    if origin in TIDELOG_ALLOWED_ORIGINS:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
+
+
+@app.route("/subscribe", methods=["POST", "OPTIONS"])
+def subscribe():
+    if request.method == "OPTIONS":
+        # 瀏覽器送 JSON POST 前會先送一次 OPTIONS 預檢請求，直接回空200+CORS標頭即可
+        return _add_cors_headers(jsonify({})), 200
+
+    data    = request.get_json(silent=True) or {}
+    email   = (data.get("email") or "").strip()
+    line_id = (data.get("line_id") or "").strip()
+
+    if not line_id.startswith("U"):
+        resp = jsonify({"ok": False, "message": "LINE User ID 格式不正確，請確認是否以U開頭"})
+        return _add_cors_headers(resp), 400
+
+    valid, display_name = verify_line_user(line_id)
+    if not valid:
+        resp = jsonify({"ok": False, "message": "找不到這個 LINE ID，請先加機器人好友，並確認 ID 複製正確"})
+        return _add_cors_headers(resp), 400
+
+    ok, msg = add_member(email, line_id, form_completed=True)
+    resp = jsonify({
+        "ok": ok,
+        "message": f"訂閱成功，{display_name}！明天早上 05:00 見 🌊" if ok else msg,
+    })
+    return _add_cors_headers(resp), (200 if ok else 500)
+
 
 # ── Webhook 主路由 ────────────────────────────────────────────
 # events 的實際處理放進背景執行緒：浪點查詢/總覽/明日預報都會同步打

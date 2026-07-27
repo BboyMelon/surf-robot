@@ -15,6 +15,14 @@ ADMIN_LINE_ID    = os.getenv("ADMIN_LINE_ID", "Ubbf53a642514770a3f153b40fcd34a4c
 BROADCAST_TOKEN  = os.getenv("BROADCAST_TOKEN", "surf-broadcast-2026")
 STREAMLIT_URL    = os.getenv("STREAMLIT_URL", "（尚未部署，敬請期待 🚀）")
 
+# ── tidelog-site（浪誌，姊妹靜態網站）允許跨網域呼叫 /subscribe 的來源 ──
+# README.md 規劃的正式網址是 https://<帳號>.github.io/tidelog/，尚未部署，
+# 屆時若跟這裡不同要記得更新；localhost:8000 對應本機 python3 -m http.server 測試
+TIDELOG_ALLOWED_ORIGINS = [
+    "http://localhost:8000",
+    "https://bboymelon.github.io",
+]
+
 # ── 浪點設定：地區 / 陸風方向 / 安全提示 ─────────────────────
 SURF_SPOTS_CONFIG = {
     # ── 北部 ──────────────────────────────────────────────────
