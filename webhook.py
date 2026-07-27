@@ -558,14 +558,10 @@ def _process_events(events: list) -> None:
                     if not reply_flex(reply_token, flex) and user_id:
                         push_flex(user_id, flex)
 
-                # 查詢自己的 LINE User ID（訂閱表單要填的就是這串，不是LINE顯示名稱）
+                # 查詢自己名稱
                 elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):
                     name = get_line_display_name(user_id)
-                    reply_message(
-                        reply_token,
-                        f"你好，{name}！\n\n你的 LINE User ID 是：\n{user_id}\n\n"
-                        "訂閱表單要填的就是上面這串（U開頭），長按可複製。"
-                    )
+                    reply_message(reply_token, f"你好，{name}！\n你的 LINE 名稱是：{name}")
 
                 # 填寫/更新 Profile（同一 LINE ID 只會有一筆檔案；已建檔過的話，
                 # 必須在訊息加上「修改/更新」才會覆寫，避免誤觸或重複建檔）
