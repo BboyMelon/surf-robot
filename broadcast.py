@@ -224,7 +224,7 @@ def fetch_marine_data_openmeteo() -> dict:
                 "current": "wave_height,wave_period,wave_direction",
                 "timezone": "Asia/Taipei",
             },
-            timeout=15,
+            timeout=20,
         )
         marine_resp.raise_for_status()
         marine_data = marine_resp.json()
@@ -238,7 +238,7 @@ def fetch_marine_data_openmeteo() -> dict:
                 "current": "wind_speed_10m,wind_direction_10m",
                 "timezone": "Asia/Taipei",
             },
-            timeout=15,
+            timeout=20,
         )
         wind_resp.raise_for_status()
         wind_data = wind_resp.json()
@@ -411,12 +411,12 @@ def get_marine_data() -> dict:
     if not cwa_data:
         # CWA 全部無效（全過期 or API 錯誤）→ 完整切換 Open-Meteo
         print("[資料切換] CWA 全部無效，改用 Open-Meteo Marine API")
-        for attempt in range(1, 3):
+        for attempt in range(1, 4):
             om = fetch_marine_data_openmeteo()
             if om:
                 return om
-            print(f"[Open-Meteo] 第 {attempt} 次重試失敗，2 秒後再試一次...")
-            time.sleep(2)
+            print(f"[Open-Meteo] 第 {attempt} 次重試失敗，5 秒後再試一次...")
+            time.sleep(5)
         return {}
 
     missing = set(STATION_COORDS.keys()) - set(cwa_data.keys())
