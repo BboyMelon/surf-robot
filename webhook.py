@@ -558,10 +558,14 @@ def _process_events(events: list) -> None:
                     if not reply_flex(reply_token, flex) and user_id:
                         push_flex(user_id, flex)
 
-                # 查詢自己名稱
+                # 查詢自己的 LINE User ID（訂閱表單要填的就是這串，不是LINE顯示名稱）
                 elif any(k in msg_text for k in ["我的ID", "我的id", "my id", "ID是", "我的名稱"]):
                     name = get_line_display_name(user_id)
-                    reply_message(reply_token, f"你好，{name}！\n你的 LINE 名稱是：{name}")
+                    reply_message(
+                        reply_token,
+                        f"你好，{name}！\n\n你的 LINE User ID 是：\n{user_id}\n\n"
+                        "訂閱表單要填的就是上面這串（U開頭），長按可複製。"
+                    )
 
                 # 填寫/更新 Profile（同一 LINE ID 只會有一筆檔案；已建檔過的話，
                 # 必須在訊息加上「修改/更新」才會覆寫，避免誤觸或重複建檔）
@@ -579,6 +583,11 @@ def _process_events(events: list) -> None:
                         if profile and user_id:
                             ok, msg = save_profile(user_id, profile)
                             if ok:
+                                # 建檔成功＝自動開通05:00廣播（form_completed=True），
+                                # 不用再另外跑一次網站表單。add_member是upsert，重複呼叫不會出錯。
+                                member_ok, member_msg = add_member("", user_id, form_completed=True)
+                                if not member_ok:
+                                    print(f"[自動開通推播失敗] {user_id} → {member_msg}")
                                 merged = {**(existing_profile or {}), **profile}
                                 reply_message(reply_token, build_profile_confirm(merged, is_update=bool(existing_profile)))
                                 print(f"[Profile {'更新' if existing_profile else '儲存'}] {user_id} → {profile}")
