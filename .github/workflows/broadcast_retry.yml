@@ -1,0 +1,61 @@
+name: Daily Broadcast Retry
+
+# 05:00 廣播若因 CWA + Open-Meteo 同時失敗而被 broadcast.py 主動取消，
+# 這個 workflow 在約一小時半後檢查今天是否已有成功紀錄，沒有的話補打一次。
+# 目的：躲過 07-27 / 07-28 那種早上短暫雙 API 故障窗口。
+
+on:
+  schedule:
+    - cron: '30 22 * * *'  # 台灣時間 06:30，比主排程（05:00，實際常delay到05:56~06:04）多留約半小時緩衝
+  workflow_dispatch:
+
+jobs:
+  retry-if-failed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 檢查今日廣播狀態
+        id: check
+        run: |
+          STATUS_JSON=$(curl -s -m 15 \
+            https://surf-robot.onrender.com/broadcast-status \
+            -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" || echo '{}')
+          echo "回應：$STATUS_JSON"
+          SUCCESS=$(echo "$STATUS_JSON" | jq -r '.success // false')
+          echo "success=$SUCCESS" >> "$GITHUB_OUTPUT"
+
+      - name: 今日已成功，跳過
+        if: steps.check.outputs.success == 'true'
+        run: echo "✅ 今日 05:00 廣播已成功，不需補推"
+
+      - name: 喚醒 Render（補推前）
+        if: steps.check.outputs.success != 'true'
+        run: |
+          echo "⚠️ 今日尚無成功紀錄，準備補推一次"
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              https://surf-robot.onrender.com/health --max-time 15 || echo "000")
+            echo "  /health 嘗試 $i/12：HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "✅ 服務已就緒"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: 補推廣播
+        if: steps.check.outputs.success != 'true'
+        run: |
+          for i in 1 2 3; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              https://surf-robot.onrender.com/broadcast-now \
+              -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" \
+              --max-time 30 || echo "000")
+            echo "  嘗試 $i/3：HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "✅ 補推觸發成功"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "❌ 補推觸發失敗（3次都不是200）"
+          exit 1

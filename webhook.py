@@ -12,7 +12,7 @@ import schedule
 from datetime import datetime
 from flask import Flask, request, abort, jsonify
 from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL, TIDELOG_ALLOWED_ORIGINS
-from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status
+from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status, has_alert_logged
 from line_api import (
     push_text as push_message,
     push_flex,
@@ -28,6 +28,7 @@ from broadcast import (
     fetch_tomorrow_forecast, build_tomorrow_full_report,
     build_overview_report,
     fetch_tide_today, build_tide_line,
+    TW_TZ,
 )
 
 app = Flask(__name__)
@@ -428,6 +429,18 @@ def trigger_broadcast():
     threading.Thread(target=broadcast, daemon=True).start()
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔔 外部廣播觸發成功")
     return "Broadcast triggered", 200
+
+
+# ── 廣播狀態查詢（供 broadcast_retry.yml 判斷今日是否已成功）──
+@app.route("/broadcast-status", methods=["GET"])
+def broadcast_status():
+    """檢查台灣今日日期是否已有成功廣播紀錄（broadcast() 內 log_alert 寫入）。"""
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {BROADCAST_TOKEN}":
+        abort(403)
+    today_key = datetime.now(TW_TZ).strftime("%Y-%m-%d")
+    success = has_alert_logged("broadcast_success", today_key)
+    return {"date": today_key, "success": success}, 200
 
 
 # ── tidelog-site 訂閱表單端點（Email選填＋LINE ID必填）───────

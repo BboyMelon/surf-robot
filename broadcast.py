@@ -935,6 +935,10 @@ def broadcast():
     total = len(members) + len(groups)
     print(f"  ✅ 廣播完成：{ok} 成功 / {fail} 失敗 / {total} 總計")
 
+    # 記錄今日廣播成功，供 broadcast_retry.yml 判斷是否需要補推
+    today_key = datetime.now(TW_TZ).strftime("%Y-%m-%d")
+    log_alert("broadcast_success", today_key)
+
 
 # ── 未填資料提醒 ──────────────────────────────────────────
 PROFILE_REMINDER = """👋 嗨！你還沒建立衝浪檔案喔～
