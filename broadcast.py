@@ -139,13 +139,22 @@ def fetch_marine_data() -> dict:
 
         locations = d["Records"]["SeaSurfaceObs"]["Location"]
 
+        def _obs_dt(t):
+            try:
+                return datetime.fromisoformat(t.get("DateTime", ""))
+            except (ValueError, TypeError):
+                return datetime.min.replace(tzinfo=TW_TZ)
+
         for loc in locations:
             sid = loc["Station"]["StationID"]
             times = loc["StationObsTimes"]["StationObsTime"]
             if not times:
                 continue
 
-            latest = times[-1]
+            # CWA 回傳的時間陣列並非依時間排序，曾用 times[-1] 誤取到近24小時前的
+            # 舊紀錄，被新鮮度檢查誤判成「資料過期」而整批切去 Open-Meteo 備援。
+            # 必須實際比較 DateTime 取真正最新的一筆。
+            latest = max(times, key=_obs_dt)
             we = latest.get("WeatherElements", {})
             anemo = we.get("PrimaryAnemometer", {})
             if not isinstance(anemo, dict):
