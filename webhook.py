@@ -273,6 +273,7 @@ def build_resources_flex() -> dict:
             _uri_btn("🔬 國家海洋研究院 NODASS", "https://nodass.namr.gov.tw/", "#0A6B5E"),
             _uri_btn("🏄 Swell Eye 衝浪科學", "https://www.surf-forecast.com/", "#C45D00"),
             _uri_btn("🗺️ Windy 動態地圖", "https://www.windy.com/?waves,23.8,121.8,6", "#3D1A70"),
+            _uri_btn("💨 Windguru 烏石港", "https://www.windguru.cz/301412", "#005A8C"),
         ]),
     }
 
