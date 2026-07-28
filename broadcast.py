@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
-from config import SURF_SPOTS_CONFIG, CWA_API_KEY, ADMIN_LINE_ID, get_surf_level
+from config import SURF_SPOTS_CONFIG, CWA_API_KEY, ADMIN_LINE_ID, get_surf_level, SPOT_STATION_MAP, STATION_COORDS
 from db import get_all_members, get_broadcast_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time, has_alert_logged
 from line_api import push_text as push_line_message
 
@@ -53,52 +53,12 @@ CWA_MARINE_URL = (
 )
 CWA_TIDE_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-A0021-001"
 
-# ── 浪點 → 最近浮標站對應表（CWA O-B0075-001）──────────────
-SPOT_STATION_MAP = {
-    # 北部
-    "金山中角灣（沙珠灣）": "46778A", # 北部外海浮標（石門/金山海域）
-    "翡翠灣":     "46778A",   # 北部外海浮標（實測真實座標距離11.3km，原C6AH2誤配相距33.4km）
-    "烏石港":     "46757B",   # 東北角外海浮標
-    # 宜蘭
-    "宜蘭外澳":   "46757B",   # 東北角外海浮標
-    # 貢寮
-    "福隆":       "C6AH2",    # 東北角外海浮標（貢寮/福隆海域最近站，實測10.7km）
-    # 中部
-    "松柏港福德里": "46714D",  # 台灣海峽中部浮標
-    "外埔漁港":     "COMC08",  # 台灣海峽中部浮標（外埔附近）
-    # 東部（花蓮）
-    "花蓮北濱公園": "46706A",  # 花蓮外海浮標（東部海域）
-    "花蓮環保公園": "46706A",  # 同浮標，北濱/環保公園相鄰
-    # 東部（台東）
-    "台東金樽":     "46761F",  # 成功浮標（台東東河/金樽附近）
-    "台東東河":     "46761F",  # 同浮標，金樽/東河相鄰
-    # 南部
-    "台南漁光島": "46699A",   # 西南部外海浮標（台南/高雄海域）
-    "恆春南灣":   "46694A",   # 南部外海浮標（墾丁南灣）
-    "恆春九鵬":   "C6S94",    # 恆春半島東側外海浮標
-    "恆春佳樂水": "46694A",   # 南部外海浮標（墾丁佳樂水）
-}
-
 # 英文風向縮寫 → 中文對照
 WIND_DIR_MAP = {
     "N": "北", "NNE": "北北東", "NE": "東北", "ENE": "東北東",
     "E": "東", "ESE": "東南東", "SE": "東南", "SSE": "南南東",
     "S": "南", "SSW": "南南西", "SW": "西南", "WSW": "西南西",
     "W": "西", "WNW": "西北西", "NW": "西北", "NNW": "北北西",
-}
-
-# ── 浮標站 GPS 座標（供 Open-Meteo fallback 使用）──────────
-STATION_COORDS = {
-    "46778A": (25.30, 121.70),  # 北部外海（金山/中角灣）
-    "C6AH2":  (25.10, 122.00),  # 東北角外海（翡翠灣）
-    "46757B": (24.90, 122.00),  # 東北角外海（烏石港/外澳）
-    "46714D": (24.20, 120.30),  # 台灣海峽中部（松柏港）
-    "COMC08": (24.40, 120.50),  # 台灣海峽中部（外埔）
-    "46706A": (24.00, 121.80),  # 花蓮外海
-    "46761F": (23.10, 121.50),  # 台東/成功外海（金樽/東河）
-    "46699A": (22.60, 120.20),  # 西南外海（台南漁光島）
-    "46694A": (21.90, 120.90),  # 南部外海（墾丁南灣/佳樂水）
-    "C6S94":  (22.10, 121.20),  # 恆春半島東側（九鵬）
 }
 
 
