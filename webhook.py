@@ -26,7 +26,7 @@ from broadcast import (
     SPOT_STATION_MAP, build_spot_block,
     broadcast, check_swell_alerts, check_typhoon_alerts,
     fetch_tomorrow_forecast, build_tomorrow_full_report,
-    build_overview_report,
+    build_overview_report, get_all_spots_status,
     fetch_tide_today, build_tide_line,
     TW_TZ,
 )
@@ -451,7 +451,7 @@ def _add_cors_headers(resp):
     origin = request.headers.get("Origin", "")
     if origin in TIDELOG_ALLOWED_ORIGINS:
         resp.headers["Access-Control-Allow-Origin"] = origin
-    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return resp
 
@@ -481,6 +481,18 @@ def subscribe():
         "message": f"訂閱成功，{display_name}！明天早上 05:00 見 🌊" if ok else msg,
     })
     return _add_cors_headers(resp), (200 if ok else 500)
+
+
+@app.route("/api/live-conditions", methods=["GET"])
+def api_live_conditions():
+    """公開唯讀端點：供 tidelog-site 互動地圖抓取全浪點目前浪況，不需認證。"""
+    marine = get_marine_data()
+    spots  = get_all_spots_status(marine) if marine else []
+    resp = jsonify({
+        "updated_at": datetime.now(TW_TZ).isoformat(),
+        "spots": spots,
+    })
+    return _add_cors_headers(resp)
 
 
 # ── Webhook 主路由 ────────────────────────────────────────────

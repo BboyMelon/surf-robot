@@ -633,6 +633,45 @@ def build_overview_report(marine: dict) -> str:
     return "\n".join(lines)
 
 
+# ── 全浪點狀態（供 tidelog-site 互動地圖 API 使用）──────────
+def get_all_spots_status(marine: dict) -> list:
+    """
+    回傳每個浪點目前狀態（含座標），供靜態網站地圖標記使用。
+    座標沿用該浪點對應浮標站的 STATION_COORDS（同一片海域的近似值，
+    非浪點本身精確座標，跟 LINE 文字查詢共用同一份浪況資料來源）。
+    """
+    results = []
+    for spot_name, cfg in SURF_SPOTS_CONFIG.items():
+        sid  = SPOT_STATION_MAP.get(spot_name)
+        data = marine.get(sid, {}) if sid else {}
+        wave_h   = data.get("wave_height", 0.0)
+        period   = data.get("wave_period", 0.0)
+        has_data = not (wave_h == 0.0 and period == 0.0)
+
+        wind_dir_en = data.get("wind_dir") or ""
+        wind_dir_zh = WIND_DIR_MAP.get(wind_dir_en.upper(), "—") if wind_dir_en else "—"
+        offshore    = is_offshore(wind_dir_en, cfg.get("offshore_wind", [])) if wind_dir_en else False
+        level       = get_surf_level(wave_h, period) if has_data else None
+        lat, lon    = STATION_COORDS.get(sid, (None, None))
+
+        results.append({
+            "name":         spot_name,
+            "category":     cfg.get("category", ""),
+            "lat":          lat,
+            "lon":          lon,
+            "has_data":     has_data,
+            "wave_height":  wave_h if has_data else None,
+            "wave_period":  period if has_data else None,
+            "wind_dir":     wind_dir_zh if has_data else None,
+            "wind_beaufort": ms_to_beaufort(data.get("wind_speed", 0.0)) if has_data else None,
+            "level_label":  level["label"] if level else None,
+            "level_emoji":  level["emoji"] if level else None,
+            "stars":        surf_stars(wave_h, period, offshore) if has_data else None,
+            "safety_note":  cfg.get("safety_note", ""),
+        })
+    return results
+
+
 # ── 單一浪點格式化（共用於廣播/個人化/即時查詢三處）──────────
 def build_spot_block(spot_name: str, cfg: dict, data: dict,
                       profile: dict = None, tide_line: str = "") -> list:
