@@ -273,7 +273,6 @@ def build_resources_flex() -> dict:
             _uri_btn("🔬 國家海洋研究院 NODASS", "https://nodass.namr.gov.tw/", "#0A6B5E"),
             _uri_btn("🏄 Swell Eye 衝浪科學", "https://www.surf-forecast.com/", "#C45D00"),
             _uri_btn("🗺️ Windy 動態地圖", "https://www.windy.com/?waves,23.8,121.8,6", "#3D1A70"),
-            _uri_btn("💨 Windguru 烏石港", "https://www.windguru.cz/301412", "#005A8C"),
         ]),
     }
 
@@ -560,20 +559,21 @@ def _process_events(events: list) -> None:
                         update_display_name(user_id, display_name)
 
                 # ── 圖文選單觸發（reply 失敗時用 push 備援，防止部署重啟空窗期 token 過期）──
-                if "🔍 即時浪況查詢" in msg_text:
+                # 文字比對同時接受圖文選單送出的完整emoji版本，跟使用者手動輸入的純文字版本
+                if "即時浪況查詢" in msg_text:
                     if not reply_message(reply_token, SPOT_QUERY_HINT) and user_id:
                         push_message(user_id, SPOT_QUERY_HINT)
 
-                elif "📝 Surfer 檔案建立" in msg_text:
+                elif "Surfer 檔案建立" in msg_text:
                     if not reply_message(reply_token, PROFILE_FORM) and user_id:
                         push_message(user_id, PROFILE_FORM)
 
-                elif "📺 浪況數據與直播資源" in msg_text or "📚 專業海象觀測網" in msg_text:
+                elif "浪況數據與直播資源" in msg_text or "專業海象觀測網" in msg_text:
                     flex = build_resources_flex()
                     if not reply_flex(reply_token, flex) and user_id:
                         push_flex(user_id, flex)
 
-                elif "🗺️ Windy 動態地圖" in msg_text:
+                elif "Windy 動態地圖" in msg_text:
                     windy_msg = "🗺️ Windy 動態地圖\n\n點擊下方連結，查看台灣即時浪高與湧浪粒子動圖 👇\nhttps://www.windy.com/?waves,23.8,121.8,6"
                     if not reply_message(reply_token, windy_msg) and user_id:
                         push_message(user_id, windy_msg)
@@ -686,25 +686,28 @@ def _process_events(events: list) -> None:
                         reply_message(reply_token, "⚠️ 目前無法取得明日預報資料，請稍後再試。")
 
                 # 其餘訊息：先嘗試浪點查詢，否則引導未建檔用戶填資料
+                # （跟上面圖文選單分支一致，reply失敗一律用push備援，避免冷啟動期間reply token
+                # 過期時完全沒有任何回覆）
                 else:
                     query_spots = detect_query_spots(msg_text)
                     if query_spots:
                         marine = get_marine_data()
                         if marine:
                             p = get_profile(user_id)
-                            reply_message(reply_token, build_instant_report(query_spots, marine, p))
+                            msg = build_instant_report(query_spots, marine, p)
                         else:
-                            reply_message(reply_token, "⚠️ 目前無法取得浪況資料，請稍後再試。")
+                            msg = "⚠️ 目前無法取得浪況資料，請稍後再試。"
                     else:
                         p = get_profile(user_id)
                         if not p:
                             name = get_line_display_name(user_id)
-                            reply_message(reply_token, build_no_profile_prompt(name))
+                            msg = build_no_profile_prompt(name)
                         else:
-                            reply_message(reply_token,
-                                "找不到對應的浪點或指令 🤔\n"
-                                "輸入 help 查看支援的地區與浪點名稱 👇"
-                            )
+                            msg = ("找不到對應的浪點或指令 🤔\n"
+                                   "輸入 help 查看支援的地區與浪點名稱 👇")
+
+                    if not reply_message(reply_token, msg) and user_id:
+                        push_message(user_id, msg)
 
         except Exception as e:
             print(f"[_process_events 錯誤] event={event.get('type')} err={e}")
