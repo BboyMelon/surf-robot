@@ -8,3 +8,5 @@ surf_bot.db
 api權限.txt
 *.json
 .DS_Store
+tidelog-site/
+open_meteo_project/
