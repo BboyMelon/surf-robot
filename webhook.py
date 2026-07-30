@@ -321,47 +321,92 @@ def build_resources_flex() -> dict:
 
 # ── 圖文選單：訂閱表單邀請 Flex Message ─────────────────────
 def build_subscribe_flex() -> dict:
+    subscribe_bubble = {
+        "type": "bubble",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#0A6B5E",
+            "contents": [{
+                "type": "text",
+                "text": "📋 立即訂閱浪況推播",
+                "color": "#ffffff",
+                "weight": "bold",
+                "size": "lg",
+            }],
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "完成訂閱後，才能啟用每日 05:00 自動推播浪況功能，並可在訂閱頁瀏覽衝浪相關電子報與資訊 🌊",
+                    "wrap": True,
+                    "size": "sm",
+                    "color": "#444444",
+                },
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#0A6B5E",
+                    "action": {
+                        "type": "uri",
+                        "label": "🌊 前往訂閱表單",
+                        "uri": STREAMLIT_URL,
+                    },
+                },
+            ],
+        },
+    }
+
+    tidelog_bubble = {
+        "type": "bubble",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#0b2740",
+            "contents": [{
+                "type": "text",
+                "text": "📖 了解更多衝浪知識",
+                "color": "#ffffff",
+                "weight": "bold",
+                "size": "lg",
+            }],
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "想了解更多衝浪知識跟浪況，歡迎來衝浪筆記，浪誌TIDELOG 讓你讀懂台灣的每一道浪。",
+                    "wrap": True,
+                    "size": "sm",
+                    "color": "#444444",
+                },
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#1477c9",
+                    "action": {
+                        "type": "uri",
+                        "label": "🌊 前往浪誌 Blog",
+                        "uri": "https://bboymelon.github.io/tidelog/",
+                    },
+                },
+            ],
+        },
+    }
+
     return {
         "type": "flex",
         "altText": "📋 立即訂閱浪況推播",
         "contents": {
-            "type": "bubble",
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#0A6B5E",
-                "contents": [{
-                    "type": "text",
-                    "text": "📋 立即訂閱浪況推播",
-                    "color": "#ffffff",
-                    "weight": "bold",
-                    "size": "lg",
-                }],
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "md",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": "完成訂閱後，才能啟用每日 05:00 自動推播浪況功能，並可在訂閱頁瀏覽衝浪相關電子報與資訊 🌊",
-                        "wrap": True,
-                        "size": "sm",
-                        "color": "#444444",
-                    },
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#0A6B5E",
-                        "action": {
-                            "type": "uri",
-                            "label": "🌊 前往訂閱表單",
-                            "uri": STREAMLIT_URL,
-                        },
-                    },
-                ],
-            },
+            "type": "carousel",
+            "contents": [subscribe_bubble, tidelog_bubble],
         },
     }
 
