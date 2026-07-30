@@ -240,7 +240,67 @@ Leaflet.js（開源 JS 地圖繪圖套件，免費、不用 API Key）
 
 ---
 
-## 7. 技術對標總表（給你自己複習用）
+## 7. 補充 Q&A
+
+### 7-1 我的資料庫是關聯式還是非關聯式？
+
+**關聯式（Relational Database）**。Supabase 底層就是 **PostgreSQL**，特徵完全符合：
+
+- 資料存在固定欄位的表格裡（`members`、`profiles`、`alerts_log`、`contact_messages`），每張表都有明確的欄位名稱跟型別
+- 表跟表之間用共同欄位關聯——例如 `members.line_id` 跟 `profiles.line_id` 是同一個值，可以互相對應查詢（這就是「關聯」的意思）
+- 用 SQL 語法查詢（雖然這個專案透過 Supabase 的 Python SDK 呼叫，但底層轉譯出來還是 SQL）
+
+**VB 對照**：概念上等同 Access/SQL Server，表格、欄位、主鍵這些觀念完全通用。
+
+跟它相對的「非關聯式」（NoSQL，例如 MongoDB、Firebase Firestore）長得比較像「一包一包的 JSON 文件」，沒有固定欄位結構，彈性大但不擅長「跨表關聯查詢」。專案裡 Python 程式碼把資料當 dict 在傳（`{"line_id": ..., "email": ...}`），那只是「傳輸格式」長得像 JSON，實際存進去的地方——Supabase 那邊——仍然是有 schema 的關聯式表格，這兩件事不衝突。
+
+### 7-2 靜態網站 vs 動態網站
+
+用專案裡的兩個網站剛好是最好的對照組：
+
+| | **靜態網站**（tidelog-site） | **動態網站**（surf-robot webhook） |
+|---|---|---|
+| 內容產生時機 | **部署前**就已經產生好完整的 `.html` 檔案 | **每次請求進來時**才即時運算產生回應 |
+| 伺服器做的事 | 單純把現成檔案傳給瀏覽器（GitHub Pages 甚至不算「伺服器」，是檔案發佈服務） | 執行 Python 程式碼：查資料庫、算浪況分數、組文字 |
+| 每個人看到的內容 | 所有訪客看到的都一樣 | 可以因人而異（例如個人化浪況推薦，依浪齡給不同建議） |
+| 能不能處理輸入 | 不行（聯絡表單「送出」其實是瀏覽器 JS 主動打去 surf-robot 的 API，網站本身沒有處理能力） | 可以（LINE 傳訊息進來，webhook.py 即時判斷、查詢、回覆） |
+| 需要伺服器一直開著嗎 | 不用，檔案發布出去就結束了 | 需要，Render 要 24 小時跑著 Python 程式等請求 |
+
+一句話：**靜態網站是「印好的傳單」，動態網站是「有人在櫃檯現場幫你算」**。這也是為什麼 tidelog-site 自己沒辦法存聯絡表單資料——它沒有「現場算」的能力，只能請 JS 打電話去 surf-robot（動態網站）幫忙處理。
+
+### 7-3 在 GitHub 上部署靜態網站的步驟
+
+以 tidelog-site 為例，完整走過一次：
+
+```
+① 本機建立 git repo（一次性）
+   git init
+
+② GitHub 建一個 repo（一次性）
+   gh repo create BboyMelon/tidelog --public
+   （或直接在 github.com 網頁上點 New repository）
+
+③ 本機 repo 接上 GitHub 的 repo（一次性）
+   git remote add origin https://github.com/BboyMelon/tidelog.git
+
+④ 開通 GitHub Pages（一次性設定）
+   GitHub repo 頁面 → Settings → Pages
+   → Source 選 "Deploy from a branch"
+   → Branch 選 main，資料夾選 / (root)
+   → 存檔後 GitHub 會給你網址：https://<帳號>.github.io/<repo名稱>/
+
+⑤ 之後每次更新內容（重複做的部分）
+   python3 scripts/gen_site.py   ← 先產生最新的 .html
+   git add .
+   git commit -m "說明這次改了什麼"
+   git push                       ← 觸發 GitHub Pages 自動重新 build
+```
+
+第 ①-④ 步 tidelog-site 早就做過了（已經在線上），**之後每次只需要重複第 ⑤ 步**。push 完 GitHub 後台會自動跑一個小型建置流程（預設用 Jekyll 引擎處理，但這個網站沒有用到 Jekyll 特殊語法，所以它基本上就是把檔案原封不動發佈），大概 30-60 秒內新內容就會反映在正式網址上。
+
+---
+
+## 8. 技術對標總表（給你自己複習用）
 
 | 這個專案用的技術 | 概念上等同你熟悉的 |
 |---|---|
