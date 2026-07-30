@@ -16,7 +16,7 @@ BUTTONS = [
     {"icon": "🔍", "label": "即時浪況查詢",    "top": "#6AC6F2", "bottom": "#0B7DB8", "text_trigger": "🔍 即時浪況查詢"},
     {"icon": "📝", "label": "Surfer 檔案建立",  "top": "#5FE0CE", "bottom": "#00A39A", "text_trigger": "📝 Surfer 檔案建立"},
     {"icon": "📺", "label": "浪況數據與直播資源", "top": "#FFAE8F", "bottom": "#F2604C", "text_trigger": "📺 浪況數據與直播資源"},
-    {"icon": "📋", "label": "加入浪況訂閱會員", "top": "#FFDE8A", "bottom": "#FFA62B", "text_trigger": "📋 加入浪況訂閱會員"},
+    {"icon": "📖", "label": "了解更多衝浪技巧", "top": "#FFDE8A", "bottom": "#FFA62B", "text_trigger": "📖 了解更多衝浪技巧"},
 ]
 
 

@@ -601,7 +601,7 @@ def _process_events(events: list) -> None:
                         push_message(user_id, windy_msg)
 
                 # 訂閱表單邀請
-                elif any(k in msg_text for k in ["訂閱", "立即訂閱", "加入訂閱", "訂閱表單"]):
+                elif any(k in msg_text for k in ["訂閱", "立即訂閱", "加入訂閱", "訂閱表單", "了解更多衝浪技巧", "衝浪技巧"]):
                     flex = build_subscribe_flex()
                     if not reply_flex(reply_token, flex) and user_id:
                         push_flex(user_id, flex)
