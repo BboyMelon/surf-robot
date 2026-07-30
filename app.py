@@ -5,7 +5,7 @@
 """
 import streamlit as st
 import pandas as pd
-from db import add_member, get_all_members, get_all_groups, get_all_profiles
+from db import add_member, get_all_members, get_all_groups, get_all_profiles, get_all_contact_messages
 from broadcast import remind_incomplete_profiles
 from config import ADMIN_PASSWORD, SURF_SPOTS_CONFIG
 
@@ -49,6 +49,15 @@ with st.sidebar:
             st.dataframe(df_p[show_cols_p], use_container_width=True)
         else:
             st.info("尚無用戶檔案")
+
+        st.subheader("📬 浪誌 TIDELOG 聯絡表單")
+        contacts = get_all_contact_messages()
+        if contacts:
+            df_c = pd.DataFrame(contacts)
+            show_cols_c = [c for c in ["name", "email", "message", "created_at"] if c in df_c.columns]
+            st.dataframe(df_c[show_cols_c], use_container_width=True)
+        else:
+            st.info("尚無聯絡訊息")
 
         st.divider()
         st.subheader("📣 推播管理")

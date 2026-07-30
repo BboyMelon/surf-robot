@@ -12,7 +12,7 @@ import schedule
 from datetime import datetime
 from flask import Flask, request, abort, jsonify
 from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, TIDELOG_ALLOWED_ORIGINS
-from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status, has_alert_logged
+from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status, has_alert_logged, save_contact_message
 from line_api import (
     push_text as push_message,
     push_flex,
@@ -481,6 +481,26 @@ def subscribe():
         "ok": ok,
         "message": f"訂閱成功，{display_name}！明天早上 05:00 見 🌊" if ok else msg,
     })
+    return _add_cors_headers(resp), (200 if ok else 500)
+
+
+@app.route("/api/contact", methods=["POST", "OPTIONS"])
+def api_contact():
+    """tidelog-site「聯絡我們」表單端點：寫入 Supabase contact_messages 表。"""
+    if request.method == "OPTIONS":
+        return _add_cors_headers(jsonify({})), 200
+
+    data    = request.get_json(silent=True) or {}
+    name    = (data.get("name") or "").strip()
+    email   = (data.get("email") or "").strip()
+    message = (data.get("message") or "").strip()
+
+    if not name or not message:
+        resp = jsonify({"ok": False, "message": "姓名與訊息為必填"})
+        return _add_cors_headers(resp), 400
+
+    ok, msg = save_contact_message(name, email, message)
+    resp = jsonify({"ok": ok, "message": "送出成功，我們會盡快回覆你！" if ok else msg})
     return _add_cors_headers(resp), (200 if ok else 500)
 
 

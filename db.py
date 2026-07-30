@@ -70,6 +70,15 @@ def init_sqlite():
         CREATE INDEX IF NOT EXISTS idx_alerts_log_type_key
         ON alerts_log (alert_type, alert_key)
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS contact_messages (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT,
+            email      TEXT,
+            message    TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -375,6 +384,42 @@ def get_last_alert_time(alert_type: str, alert_key: str) -> Optional[datetime]:
     except Exception as e:
         print(f"[get_last_alert_time 失敗] {e}")
         return None
+
+
+# ── tidelog-site 聯絡表單 ──────────────────────────────────────
+def save_contact_message(name: str, email: str, message: str) -> Tuple[bool, str]:
+    """存一筆 tidelog-site 聯絡表單訊息，供 Streamlit 後台／TablePlus 查看。"""
+    try:
+        if USE_SUPABASE:
+            _sb.table("contact_messages").insert(
+                {"name": name, "email": email, "message": message}
+            ).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute(
+                "INSERT INTO contact_messages (name, email, message) VALUES (?, ?, ?)",
+                (name, email, message)
+            )
+            conn.commit()
+            conn.close()
+        return True, "送出成功"
+    except Exception as e:
+        return False, str(e)
+
+
+def get_all_contact_messages() -> List[dict]:
+    """取得所有聯絡表單訊息（Streamlit 後台用），依時間新到舊排序。"""
+    try:
+        if USE_SUPABASE:
+            res = _sb.table("contact_messages").select("*").order("created_at", desc=True).execute()
+            return res.data
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM contact_messages ORDER BY created_at DESC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
 
 
 def has_alert_logged(alert_type: str, alert_key: str) -> bool:
