@@ -11,7 +11,7 @@ import time
 import schedule
 from datetime import datetime
 from flask import Flask, request, abort, jsonify
-from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, STREAMLIT_URL, TIDELOG_ALLOWED_ORIGINS
+from config import LINE_CHANNEL_SECRET, SURF_SPOTS_CONFIG, BROADCAST_TOKEN, TIDE_STATION_MAP, TIDELOG_ALLOWED_ORIGINS
 from db import add_member, add_group, remove_member, remove_group, save_profile, get_profile, update_display_name, pause_member, resume_member, get_member_status, has_alert_logged
 from line_api import (
     push_text as push_message,
@@ -115,9 +115,9 @@ def build_welcome(is_group: bool = False) -> str:
 我們會為您精準守候台灣各大浪點，讓您不再錯過起浪好日子！
 
 ⏰ 【每日定時報浪時間】
-完成下方訂閱表單即可解鎖每日 05:00 自動推播，結合 Swell Eye 湧浪能量與 GoOcean 安全評級的精準浪況簡報！
+每日 05:00 自動推播，結合 Swell Eye 湧浪能量與 GoOcean 安全評級的精準浪況簡報！
 
-📋 輸入「訂閱」前往官方訂閱表單，解鎖每日推播＋完整功能＋瀏覽衝浪相關電子報資訊！
+📖 輸入「訂閱」前往浪誌 TIDELOG，看更多衝浪知識與浪況部落格！
 
 👇 【自助功能選單】
 手機下方已為您準備快捷圖文選單，動動手指即可解鎖更多衝浪黑科技！
@@ -178,8 +178,8 @@ def skill_label(surf_years: int) -> str:
 # ── 指令總覽 ──────────────────────────────────────────────────
 HELP_TEXT = """📖 指令總覽
 
-📋 【訂閱】
-  訂閱 → 前往官方訂閱表單，解鎖每日推播
+📖 【衝浪知識】
+  訂閱 → 前往浪誌 TIDELOG 部落格，看更多衝浪知識與浪況筆記
 
 🗺️ 【全台總覽】
   總覽 → 每區一行精簡摘要
@@ -321,46 +321,6 @@ def build_resources_flex() -> dict:
 
 # ── 圖文選單：訂閱表單邀請 Flex Message ─────────────────────
 def build_subscribe_flex() -> dict:
-    subscribe_bubble = {
-        "type": "bubble",
-        "header": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": "#0A6B5E",
-            "contents": [{
-                "type": "text",
-                "text": "📋 立即訂閱浪況推播",
-                "color": "#ffffff",
-                "weight": "bold",
-                "size": "lg",
-            }],
-        },
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "spacing": "md",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "完成訂閱後，才能啟用每日 05:00 自動推播浪況功能，並可在訂閱頁瀏覽衝浪相關電子報與資訊 🌊",
-                    "wrap": True,
-                    "size": "sm",
-                    "color": "#444444",
-                },
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#0A6B5E",
-                    "action": {
-                        "type": "uri",
-                        "label": "🌊 前往訂閱表單",
-                        "uri": STREAMLIT_URL,
-                    },
-                },
-            ],
-        },
-    }
-
     tidelog_bubble = {
         "type": "bubble",
         "header": {
@@ -369,7 +329,7 @@ def build_subscribe_flex() -> dict:
             "backgroundColor": "#0b2740",
             "contents": [{
                 "type": "text",
-                "text": "📖 了解更多衝浪知識",
+                "text": "📖 了解更多衝浪技巧與知識",
                 "color": "#ffffff",
                 "weight": "bold",
                 "size": "lg",
@@ -403,11 +363,8 @@ def build_subscribe_flex() -> dict:
 
     return {
         "type": "flex",
-        "altText": "📋 立即訂閱浪況推播",
-        "contents": {
-            "type": "carousel",
-            "contents": [subscribe_bubble, tidelog_bubble],
-        },
+        "altText": "📖 了解更多衝浪技巧與知識",
+        "contents": tidelog_bubble,
     }
 
 # ── 未建檔提示 ────────────────────────────────────────────────
