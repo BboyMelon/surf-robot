@@ -269,9 +269,9 @@ def build_resources_flex() -> dict:
         "type": "bubble",
         "header": _hdr("📊 海象觀測資源", "#0D4F8C"),
         "body": _body([
-            _uri_btn("🌊 中央氣象署 CWA 海象資訊", "https://ocean.cwb.gov.tw/", "#1a5fa8"),
+            _uri_btn("🌊 中央氣象署 CWA 海象資訊", "https://www.cwa.gov.tw/V8/C/M/OBS_Marine.html", "#1a5fa8"),
             _uri_btn("🔬 國家海洋研究院 NODASS", "https://nodass.namr.gov.tw/", "#0A6B5E"),
-            _uri_btn("🏄 Swell Eye 衝浪科學", "https://www.surf-forecast.com/", "#C45D00"),
+            _uri_btn("🏄 Surf-Forecast.com", "https://www.surf-forecast.com/", "#C45D00"),
             _uri_btn("🗺️ Windy 動態地圖", "https://www.windy.com/?waves,23.8,121.8,6", "#3D1A70"),
         ]),
     }
