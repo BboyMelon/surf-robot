@@ -641,9 +641,14 @@ def _process_events(events: list) -> None:
                 # 必須在訊息加上「修改/更新」才會覆寫，避免誤觸或重複建檔）
                 elif "性別" in msg_text and "浪齡" in msg_text:
                     existing_profile = get_profile(user_id)
+                    # 注意：不能只憑「有沒有這筆紀錄」判斷，因為 update_display_name()
+                    # 會在使用者第一次互動時就先 upsert 一筆只有 line_id+display_name 的
+                    # 空殼紀錄。要看 gender 這種只有真正送出建檔格式才會寫入的欄位，
+                    # 才能正確分辨「真的建過檔」跟「只是傳過訊息」。
+                    has_real_profile = bool(existing_profile and existing_profile.get("gender"))
                     wants_edit = any(k in msg_text for k in ["修改", "更新", "edit"])
 
-                    if existing_profile and not wants_edit:
+                    if has_real_profile and not wants_edit:
                         reply_message(reply_token,
                             "你已經建立過 Surfer 檔案了 🏄\n"
                             "若要修改資料，請在開頭加上「修改」二字，再依照格式重新填寫並回傳喔！\n\n"
@@ -659,8 +664,8 @@ def _process_events(events: list) -> None:
                                 if not member_ok:
                                     print(f"[自動開通推播失敗] {user_id} → {member_msg}")
                                 merged = {**(existing_profile or {}), **profile}
-                                reply_message(reply_token, build_profile_confirm(merged, is_update=bool(existing_profile)))
-                                print(f"[Profile {'更新' if existing_profile else '儲存'}] {user_id} → {profile}")
+                                reply_message(reply_token, build_profile_confirm(merged, is_update=has_real_profile))
+                                print(f"[Profile {'更新' if has_real_profile else '儲存'}] {user_id} → {profile}")
                             else:
                                 reply_message(reply_token, "⚠️ 資料儲存失敗，請稍後再試一次。")
                                 print(f"[Profile 儲存失敗] {user_id} → {msg}")
