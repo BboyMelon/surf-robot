@@ -138,7 +138,7 @@ def build_welcome(is_group: bool = False) -> str:
 👉 點下方圖文選單「📝 Surfer 檔案建立」，或直接複製以下格式回傳：
 ━━━━━━━━━━━━
 性別：（男 / 女 / 其他）
-浪齡：（例：3）
+浪齡：（例：3,代表3年）
 版型：（長板 / 短板 / 中長板）
 常衝浪點：（填入你常去的浪點）
 ━━━━━━━━━━━━
@@ -154,7 +154,7 @@ def build_welcome(is_group: bool = False) -> str:
 🗺️ Windy 動態地圖 — 一鍵查看台灣浪高粒子圖
 
 💬 有任何建議或想新增的浪點，歡迎隨時留言！
-祝您天天 Shred Hard、安全下海！🌊"""
+祝您天天好浪、安全上岸！"""
 
 # ── 解析使用者回傳的 Profile 訊息 ────────────────────────────
 def parse_profile(text: str) -> dict:
@@ -368,7 +368,7 @@ def build_subscribe_flex() -> dict:
             "contents": [
                 {
                     "type": "text",
-                    "text": "想了解更多衝浪知識跟浪況，歡迎來衝浪筆記，浪誌TIDELOG 讓你讀懂台灣的每一道浪。",
+                    "text": "想了解更多衝浪知識跟浪況，歡迎來浪誌TIDELOG",
                     "wrap": True,
                     "size": "sm",
                     "color": "#444444",
@@ -408,7 +408,7 @@ def build_no_profile_prompt(name: str = "") -> str:
 ━━━━━━━━━━━━
 名稱：（你想被稱呼的名字）
 性別：（男 / 女 / 其他）
-浪齡：（例：3）
+浪齡：（例：3,代表3年）
 版型：（長板 / 短板 / 中長板）
 常衝浪點：（填入你常去的浪點）
 ━━━━━━━━━━━━
