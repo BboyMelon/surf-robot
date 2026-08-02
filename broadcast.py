@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
-from config import SURF_SPOTS_CONFIG, CWA_API_KEY, ADMIN_LINE_ID, get_surf_level, SPOT_STATION_MAP, STATION_COORDS
+from config import SURF_SPOTS_CONFIG, CWA_API_KEY, ADMIN_LINE_ID, get_surf_level, SPOT_STATION_MAP, STATION_COORDS, TIDE_STATION_MAP
 from db import get_all_members, get_broadcast_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time, has_alert_logged
 from line_api import push_text as push_line_message
 
@@ -534,6 +534,34 @@ def personal_rating(wave_h: float, period: float, profile: dict) -> str:
 
 
 # ── 今日最佳浪點 ─────────────────────────────────────────
+TIDE_BONUS_WINDOW_HOURS = 2   # 滿潮前後幾小時內視為浪形加成期
+TIDE_BONUS_FACTOR       = 1.15
+
+
+def _near_high_tide(spot_name: str) -> bool:
+    """判斷該浪點現在是否落在「滿潮前後 TIDE_BONUS_WINDOW_HOURS 小時」內（浪形通常較乾淨有力）。"""
+    location_id = TIDE_STATION_MAP.get(spot_name)
+    if not location_id:
+        return False
+    tide = fetch_tide_today(location_id)
+    events = tide.get("events") if tide else None
+    if not events:
+        return False
+
+    now = datetime.now(TW_TZ)
+    today_str = now.strftime("%Y-%m-%d")
+    for ev in events:
+        if ev["type"] != "滿潮":
+            continue
+        try:
+            ev_dt = datetime.strptime(f"{today_str} {ev['time']}", "%Y-%m-%d %H:%M").replace(tzinfo=TW_TZ)
+        except ValueError:
+            continue
+        if abs((now - ev_dt).total_seconds()) <= TIDE_BONUS_WINDOW_HOURS * 3600:
+            return True
+    return False
+
+
 def find_best_spots(marine: dict, top_n: int = 3) -> list:
     """
     依湧浪能量 + 陸風加成，找出今日最佳浪點。
@@ -560,17 +588,23 @@ def find_best_spots(marine: dict, top_n: int = 3) -> list:
         seen_stations.add(sid)
         offshore = is_offshore(wind_dir, spot_cfg["offshore_wind"])
         energy   = swell_energy(wave_h, period)
-        score    = swell_quality_score(wave_h, period) * (1.3 if offshore else 1.0)
+        near_high_tide = _near_high_tide(spot_name)
+        score = (
+            swell_quality_score(wave_h, period)
+            * (1.3 if offshore else 1.0)
+            * (TIDE_BONUS_FACTOR if near_high_tide else 1.0)
+        )
 
         scored.append({
-            "name":     spot_name,
-            "wave_h":   wave_h,
-            "period":   period,
-            "wind_dir": wind_dir,
-            "stars":    surf_stars(wave_h, period, offshore),
-            "level":    level,
-            "score":    score,
-            "offshore": offshore,
+            "name":           spot_name,
+            "wave_h":         wave_h,
+            "period":         period,
+            "wind_dir":       wind_dir,
+            "stars":          surf_stars(wave_h, period, offshore),
+            "level":          level,
+            "score":          score,
+            "offshore":       offshore,
+            "near_high_tide": near_high_tide,
         })
 
     scored.sort(key=lambda x: x["score"], reverse=True)
@@ -586,11 +620,12 @@ def build_best_spot_section(marine: dict) -> str:
     medals = ["🥇", "🥈", "🥉"]
     lines  = ["🏆 今日最佳浪點推薦"]
     for i, b in enumerate(best):
-        medal   = medals[i] if i < 3 else "  "
-        of_tag  = "｜🌬️ 陸風" if b["offshore"] else ""
+        medal    = medals[i] if i < 3 else "  "
+        of_tag   = "｜🌬️ 陸風" if b["offshore"] else ""
+        tide_tag = "｜🌙 滿潮加成" if b.get("near_high_tide") else ""
         lines.append(
             f"{medal} {b['name']}  {b['stars']} {b['level']['emoji']}\n"
-            f"   🌊 {b['wave_h']:.1f}m｜週期 {b['period']:.0f}s{of_tag}"
+            f"   🌊 {b['wave_h']:.1f}m｜週期 {b['period']:.0f}s{of_tag}{tide_tag}"
         )
     lines.append("──────────────────")
     return "\n".join(lines)
