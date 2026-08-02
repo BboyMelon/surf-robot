@@ -392,8 +392,16 @@ def get_marine_data() -> dict:
     missing = set(STATION_COORDS.keys()) - set(cwa_data.keys())
     if missing:
         # CWA 部分站缺失 → 從 Open-Meteo 補充，避免浪點顯示「暫無觀測資料」
+        # 補充呼叫本身也可能瞬斷（曾發生CWA正常但這次補充剛好失敗，缺失站因此完全沒資料），
+        # 比照上方「CWA全部無效」分支補上重試，不能只打一次就放棄
         print(f"[資料補充] CWA 缺少 {len(missing)} 站，向 Open-Meteo 補充：{', '.join(sorted(missing))}")
-        om = fetch_marine_data_openmeteo()
+        om = {}
+        for attempt in range(1, 4):
+            om = fetch_marine_data_openmeteo()
+            if om:
+                break
+            print(f"[Open-Meteo補充] 第 {attempt} 次重試失敗，5 秒後再試一次...")
+            time.sleep(5)
         for sid in missing:
             if sid in om:
                 cwa_data[sid] = om[sid]
