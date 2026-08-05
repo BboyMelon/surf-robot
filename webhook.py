@@ -90,8 +90,7 @@ def detect_query_spots(text: str) -> list:
 
 def build_instant_report(spots: list, marine: dict, profile: dict = None) -> str:
     """即時查詢回報：只顯示指定浪點資料。"""
-    from datetime import datetime
-    now = datetime.now().strftime("%m/%d %H:%M")
+    now = datetime.now(TW_TZ).strftime("%m/%d %H:%M")
     lines = [f"🌊 即時浪況查詢｜{now}\n"]
 
     for spot_name in spots:
@@ -455,7 +454,7 @@ def trigger_broadcast():
     if auth != f"Bearer {BROADCAST_TOKEN}":
         abort(403)
     threading.Thread(target=broadcast, daemon=True).start()
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔔 外部廣播觸發成功")
+    print(f"[{datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')}] 🔔 外部廣播觸發成功")
     return "Broadcast triggered", 200
 
 
