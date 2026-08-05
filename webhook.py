@@ -606,6 +606,13 @@ def _process_events(events: list) -> None:
                         display_name = get_line_display_name(user_id)
                         update_display_name(user_id, display_name)
 
+                    # 封鎖會觸發 unfollow → status 設成 inactive，但解除封鎖不會觸發
+                    # follow 事件把 status 改回來，導致封鎖過的人即使解除封鎖也永遠收不到
+                    # 廣播。訊息事件能送到這裡，代表對方目前確實沒被封鎖，順手自動修復。
+                    if get_member_status(user_id) == "inactive":
+                        resume_member(user_id)
+                        print(f"[自動恢復] {user_id} 從 inactive 自動改回 active（收到訊息代表未被封鎖）")
+
                 # ── 圖文選單觸發（reply 失敗時用 push 備援，防止部署重啟空窗期 token 過期）──
                 # 文字比對同時接受圖文選單送出的完整emoji版本，跟使用者手動輸入的純文字版本
                 if "即時浪況查詢" in msg_text:
