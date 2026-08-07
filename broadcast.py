@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 TW_TZ = timezone(timedelta(hours=8))  # 台灣時間 UTC+8
 from typing import List
 from config import SURF_SPOTS_CONFIG, CWA_API_KEY, ADMIN_LINE_ID, get_surf_level, SPOT_STATION_MAP, STATION_COORDS, TIDE_STATION_MAP
-from db import get_all_members, get_broadcast_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time, has_alert_logged
+from db import get_all_members, get_broadcast_members, get_all_groups, get_all_profiles, log_alert, get_last_alert_time
 from line_api import push_text as push_line_message
 
 # CWA 開放資料平台的證書鏈缺少 Subject Key Identifier 欄位。Render 上的 Python
@@ -1057,6 +1057,7 @@ CWA_TYPHOON_URL = (
 TAIWAN_LAT = 23.5   # 台灣中心座標
 TAIWAN_LON = 121.0
 TYPHOON_ALERT_KM = 1000  # 距離門檻（公里）
+TYPHOON_UPDATE_COOLDOWN_HOURS = 6  # 同一颱風距離更新間隔（跟CWA本身6小時更新一次資料對齊，避免重複推播舊資料）
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -1157,7 +1158,8 @@ def check_swell_alerts():
 def check_typhoon_alerts():
     """
     每 1 小時自動執行。呼叫 CWA W-C0034-005，
-    出現新熱帶氣旋（ID 未推播過）時立即通知所有訂閱者。
+    熱帶氣旋距台灣 ≤1000km 時通知訂閱者，之後每 TYPHOON_UPDATE_COOLDOWN_HOURS
+    小時更新一次最新距離，直到離開範圍或消散為止（非一次性通知）。
     Render 海外 IP 可能被封鎖，例外一律靜默忽略。
     """
     now = datetime.now(TW_TZ)
@@ -1185,8 +1187,13 @@ def check_typhoon_alerts():
             ty_name_eng = ty.get("TyphoonName", "")
             warn_level  = "颱風" if ty.get("CwaTyNo") else "熱帶性低氣壓"
 
-            if not ty_id or has_alert_logged("typhoon", ty_id):
+            if not ty_id:
                 continue
+
+            last = get_last_alert_time("typhoon", ty_id)
+            is_first_notice = last is None
+            if last is not None and (now - last).total_seconds() < TYPHOON_UPDATE_COOLDOWN_HOURS * 3600:
+                continue  # 距離上次推播還沒滿冷卻時間，跳過
 
             # 取最新實況座標（AnalysisData.Fix 最後一筆）
             fixes = ty.get("AnalysisData", {}).get("Fix") or []
@@ -1206,11 +1213,13 @@ def check_typhoon_alerts():
 
             log_alert("typhoon", ty_id)
 
+            title = f"🌀 熱帶氣旋通知 🌀" if is_first_notice else f"🌀 熱帶氣旋距離更新 🌀"
+            headline = f"⚠️ 中央氣象署偵測到活動中的{warn_level}！" if is_first_notice else f"⚠️ {warn_level}持續接近中，最新位置更新："
             lines = [
-                "🌀 熱帶氣旋通知 🌀",
+                title,
                 f"📅 {now.strftime('%Y-%m-%d %H:%M')}",
                 "",
-                f"⚠️ 中央氣象署偵測到活動中的{warn_level}！",
+                headline,
                 "",
                 f"🌀 名稱：{ty_name}（{ty_name_eng}）",
                 f"🔴 類型：{warn_level}",
@@ -1223,7 +1232,7 @@ def check_typhoon_alerts():
                 "──────────────────",
                 "📡 資料：中央氣象署 W-C0034-005",
             ]
-            print(f"  🌀 偵測到{warn_level}：{ty_name}（{ty_id}）距台灣 {dist_km:.0f} km → 推播")
+            print(f"  🌀 {'首次通知' if is_first_notice else '距離更新'}：{ty_name}（{ty_id}）距台灣 {dist_km:.0f} km → 推播")
             push_alert_to_all("\n".join(lines))
 
     except Exception as e:
