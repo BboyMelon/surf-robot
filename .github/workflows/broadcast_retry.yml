@@ -16,21 +16,34 @@ jobs:
       - name: 檢查今日廣播狀態
         id: check
         run: |
-          STATUS_JSON=$(curl -s -m 15 \
-            https://surf-robot.onrender.com/broadcast-status \
-            -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" || echo '{}')
-          echo "回應：$STATUS_JSON"
-          SUCCESS=$(echo "$STATUS_JSON" | jq -r '.success // false')
+          SUCCESS="unknown"
+          for i in 1 2 3; do
+            RESPONSE=$(curl -s -m 15 -w "\n%{http_code}" \
+              https://surf-robot.onrender.com/broadcast-status \
+              -H "Authorization: Bearer ${{ secrets.BROADCAST_TOKEN }}" || printf "\n000")
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+            echo "  查詢嘗試 $i/3：HTTP $HTTP_CODE，回應：$BODY"
+            if [ "$HTTP_CODE" = "200" ]; then
+              SUCCESS=$(echo "$BODY" | jq -r '.success // false')
+              break
+            fi
+            sleep 10
+          done
           echo "success=$SUCCESS" >> "$GITHUB_OUTPUT"
 
       - name: 今日已成功，跳過
         if: steps.check.outputs.success == 'true'
         run: echo "✅ 今日 05:00 廣播已成功，不需補推"
 
+      - name: 狀態查詢連續失敗，保守跳過（避免誤判造成重複推播）
+        if: steps.check.outputs.success == 'unknown'
+        run: echo "⚠️ /broadcast-status 連續3次查詢都失敗，無法確認今日是否已推播成功。為避免誤判成false而重複推播，本次不補推，請人工確認"
+
       - name: 喚醒 Render（補推前）
-        if: steps.check.outputs.success != 'true'
+        if: steps.check.outputs.success == 'false'
         run: |
-          echo "⚠️ 今日尚無成功紀錄，準備補推一次"
+          echo "⚠️ 今日確認尚無成功紀錄，準備補推一次"
           for i in $(seq 1 12); do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" \
               https://surf-robot.onrender.com/health --max-time 15 || echo "000")
@@ -43,7 +56,7 @@ jobs:
           done
 
       - name: 補推廣播
-        if: steps.check.outputs.success != 'true'
+        if: steps.check.outputs.success == 'false'
         run: |
           for i in 1 2 3; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
