@@ -458,6 +458,33 @@ def trigger_broadcast():
     return "Broadcast triggered", 200
 
 
+# ── 外部警戒觸發端點（cron-job.org 定時呼叫，取代不可靠的內部背景執行緒排程）──
+# 內部 schedule.every(...).hours.do(...) 依賴 Render process 連續存活超過該時數
+# 才會真的觸發一次，但免費方案睡眠 + 每次 push 到 main 觸發的 Render 重新部署都會
+# 重啟 process、重置計時器，導致排程實際上很難真的攢滿設定的間隔（見 2026-08-07
+# 白海豚颱風已進入1000km範圍逾6小時卻未推播的案例）。改成外部準時觸發當主要來源，
+# 內部背景排程保留當備援——兩者都呼叫同一個函式，函式內部本身有 de-dup（颱風按
+# ID、長浪按站+6h冷卻），重複觸發不會造成重複真實推播，不需要額外防重複邏輯。
+@app.route("/typhoon-check-now", methods=["POST"])
+def trigger_typhoon_check():
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {BROADCAST_TOKEN}":
+        abort(403)
+    threading.Thread(target=check_typhoon_alerts, daemon=True).start()
+    print(f"[{datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')}] 🔔 外部颱風檢查觸發成功")
+    return "Typhoon check triggered", 200
+
+
+@app.route("/swell-check-now", methods=["POST"])
+def trigger_swell_check():
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {BROADCAST_TOKEN}":
+        abort(403)
+    threading.Thread(target=check_swell_alerts, daemon=True).start()
+    print(f"[{datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')}] 🔔 外部長浪檢查觸發成功")
+    return "Swell check triggered", 200
+
+
 # ── 廣播狀態查詢（供 broadcast_retry.yml 判斷今日是否已成功）──
 @app.route("/broadcast-status", methods=["GET"])
 def broadcast_status():
